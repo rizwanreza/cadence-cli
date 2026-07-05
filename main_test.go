@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -141,6 +142,148 @@ func TestFetchReview(t *testing.T) {
 
 	if review.GoalReviews[0].WeeklyPerformance[0].EarnedPoints.FloatString() != "4.00" {
 		t.Fatalf("expected string numeric earned_points to parse, got %s", review.GoalReviews[0].WeeklyPerformance[0].EarnedPoints.FloatString())
+	}
+}
+
+func TestFetchCompletionsParsesNumericValueAndUnit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("date"); got != "2026-07-04" {
+			t.Fatalf("expected date query 2026-07-04, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		// value arrives as a JSON number now that the API coerces the decimal.
+		_, _ = w.Write([]byte(`[
+		  {"id":26,"slug":"protein","name":"Protein","goal_type":"boolean","frequency":"daily","target_value":160,"unit":"g","date":"2026-07-04","completed":false,"value":105.0}
+		]`))
+	}))
+	defer server.Close()
+
+	c := &client{http: server.Client(), baseURL: server.URL}
+	statuses, err := c.fetchCompletions("2026-07-04")
+	if err != nil {
+		t.Fatalf("fetchCompletions returned error: %v", err)
+	}
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+
+	s := statuses[0]
+	if s.Unit == nil || *s.Unit != "g" {
+		t.Fatalf("expected unit g, got %v", s.Unit)
+	}
+	if s.Value == nil || s.Value.Float() != 105.0 {
+		t.Fatalf("expected value 105.0, got %v", s.Value)
+	}
+	if s.kind() != "numeric" {
+		t.Fatalf("expected kind numeric for boolean goal with target 160, got %q", s.kind())
+	}
+}
+
+func TestNewTodayItemEmitsNumericValue(t *testing.T) {
+	unit := "g"
+	value := &entryValue{isFloat: true, float: 105.0}
+	item := newTodayItem(goalStatus{
+		ID: 26, Slug: "protein", Name: "Protein", GoalType: "boolean",
+		Frequency: "daily", TargetValue: 160, Unit: &unit, Date: "2026-07-04",
+		Completed: false, Value: value,
+	})
+
+	payload, err := json.Marshal(item)
+	if err != nil {
+		t.Fatalf("marshal returned error: %v", err)
+	}
+	out := string(payload)
+
+	for _, expected := range []string{
+		`"kind":"numeric"`,
+		`"value":105`,
+		`"unit":"g"`,
+		`"target_value":160`,
+		`"completed":false`,
+	} {
+		if !strings.Contains(out, expected) {
+			t.Fatalf("expected JSON to contain %q\n%s", expected, out)
+		}
+	}
+	// value must be a number, never a quoted string.
+	if strings.Contains(out, `"value":"105`) {
+		t.Fatalf("value was emitted as a string, want a number: %s", out)
+	}
+}
+
+func TestNewTodayItemNullValueWhenNoEntry(t *testing.T) {
+	item := newTodayItem(goalStatus{ID: 1, Slug: "meditation", GoalType: "boolean", TargetValue: 1})
+	payload, _ := json.Marshal(item)
+	if !strings.Contains(string(payload), `"value":null`) {
+		t.Fatalf("expected null value when no entry, got %s", payload)
+	}
+	if item.Kind != "pass_fail" {
+		t.Fatalf("expected pass_fail kind, got %q", item.Kind)
+	}
+}
+
+func TestKindClassification(t *testing.T) {
+	cases := []struct {
+		goalType string
+		target   float64
+		want     string
+	}{
+		{"boolean", 1, "pass_fail"},
+		{"boolean", 160, "numeric"},
+		{"duration", 30, "numeric"},
+		{"count", 1, "count"},
+	}
+	for _, tc := range cases {
+		got := goalStatus{GoalType: tc.goalType, TargetValue: tc.target}.kind()
+		if got != tc.want {
+			t.Fatalf("kind(%s, %g) = %q, want %q", tc.goalType, tc.target, got, tc.want)
+		}
+	}
+}
+
+func TestTodayProgressAndStatus(t *testing.T) {
+	unit := "g"
+	numeric := goalStatus{GoalType: "boolean", TargetValue: 160, Unit: &unit,
+		Value: &entryValue{isFloat: true, float: 105}, Completed: false}
+	if got := todayProgress(numeric); got != "105 / 160 g" {
+		t.Fatalf("numeric progress = %q, want %q", got, "105 / 160 g")
+	}
+	if got := todayStatus(numeric); got != "✗ incomplete" {
+		t.Fatalf("numeric status = %q, want %q", got, "✗ incomplete")
+	}
+
+	passFail := goalStatus{GoalType: "boolean", TargetValue: 1,
+		Value: &entryValue{isFloat: true, float: 1}, Completed: true}
+	if got := todayProgress(passFail); got != "—" {
+		t.Fatalf("pass/fail progress = %q, want dash", got)
+	}
+	if got := todayStatus(passFail); got != "✓ done" {
+		t.Fatalf("pass/fail status = %q, want %q", got, "✓ done")
+	}
+
+	// count goal with no entry yet: value defaults to 0.
+	count := goalStatus{GoalType: "count", TargetValue: 5}
+	if got := todayProgress(count); got != "0 / 5" {
+		t.Fatalf("count progress = %q, want %q", got, "0 / 5")
+	}
+}
+
+func TestFilterStatuses(t *testing.T) {
+	statuses := []goalStatus{
+		{ID: 26, Slug: "protein"},
+		{ID: 9, Slug: "deep_work"},
+	}
+	if got := filterStatuses(statuses, "protein"); len(got) != 1 || got[0].Slug != "protein" {
+		t.Fatalf("filter by slug failed: %+v", got)
+	}
+	if got := filterStatuses(statuses, "9"); len(got) != 1 || got[0].ID != 9 {
+		t.Fatalf("filter by id failed: %+v", got)
+	}
+	if got := filterStatuses(statuses, "missing"); len(got) != 0 {
+		t.Fatalf("expected no matches, got %+v", got)
 	}
 }
 

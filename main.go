@@ -75,6 +75,7 @@ type goal struct {
 	ActiveDays []int    `json:"active_days"`
 	Active     bool     `json:"active"`
 	Archived   bool     `json:"archived"`
+	Unit       *string  `json:"unit"`
 }
 
 type goalStatus struct {
@@ -84,9 +85,64 @@ type goalStatus struct {
 	GoalType    string      `json:"goal_type"`
 	Frequency   string      `json:"frequency"`
 	TargetValue float64     `json:"target_value"`
+	Unit        *string     `json:"unit"`
 	Date        string      `json:"date"`
 	Completed   bool        `json:"completed"`
 	Value       *entryValue `json:"value"`
+}
+
+// kind classifies a goal for automation and human display. The API's goal_type
+// enum (boolean/count/duration) is not enough on its own: a "boolean" goal with
+// a target above 1 is really a numeric threshold (e.g. hit 160g protein), which
+// reads very differently from a simple yes/no goal.
+func (s goalStatus) kind() string {
+	switch s.GoalType {
+	case "count":
+		return "count"
+	case "boolean", "duration":
+		if s.TargetValue > 1 {
+			return "numeric"
+		}
+		return "pass_fail"
+	default:
+		return s.GoalType
+	}
+}
+
+// todayItem is the machine-readable shape emitted by `today --json`. It flattens
+// entryValue into a plain JSON number so agents never have to parse a string.
+type todayItem struct {
+	ID          int      `json:"id"`
+	Slug        string   `json:"slug"`
+	Name        string   `json:"name"`
+	GoalType    string   `json:"goal_type"`
+	Kind        string   `json:"kind"`
+	Frequency   string   `json:"frequency"`
+	TargetValue float64  `json:"target_value"`
+	Date        string   `json:"date"`
+	Completed   bool     `json:"completed"`
+	Value       *float64 `json:"value"`
+	Unit        *string  `json:"unit"`
+}
+
+func newTodayItem(s goalStatus) todayItem {
+	item := todayItem{
+		ID:          s.ID,
+		Slug:        s.Slug,
+		Name:        s.Name,
+		GoalType:    s.GoalType,
+		Kind:        s.kind(),
+		Frequency:   s.Frequency,
+		TargetValue: s.TargetValue,
+		Date:        s.Date,
+		Completed:   s.Completed,
+		Unit:        s.Unit,
+	}
+	if s.Value != nil {
+		v := s.Value.Float()
+		item.Value = &v
+	}
+	return item
 }
 
 type goalEntry struct {
@@ -253,11 +309,11 @@ func main() {
 
 	switch args[0] {
 	case "goals":
-		if err := listGoals(c); err != nil {
+		if err := listGoals(c, args[1:]); err != nil {
 			fatal(err.Error())
 		}
 	case "cycles":
-		if err := listTwelveWeekYears(c); err != nil {
+		if err := listTwelveWeekYears(c, args[1:]); err != nil {
 			fatal(err.Error())
 		}
 	case "review":
@@ -456,11 +512,11 @@ func usage() {
 	fmt.Println(heading.Render("Usage"))
 	fmt.Println("  cadence login [-token <token>] [-url <base_url>]")
 	fmt.Println("  cadence logout")
-	fmt.Println("  cadence goals")
-	fmt.Println("  cadence cycles")
+	fmt.Println("  cadence goals [-json]")
+	fmt.Println("  cadence cycles [-json]")
 	fmt.Println("  cadence review -id <twelve_week_year_id> [-json]")
 	fmt.Println("  cadence complete -goal <id|slug> [-date YYYY-MM-DD] [-value <number>]")
-	fmt.Println("  cadence today [-date YYYY-MM-DD]")
+	fmt.Println("  cadence today [-date YYYY-MM-DD] [-slug <slug|id>] [-json]")
 	fmt.Println()
 	fmt.Println(subtle.Render("  Defaults to " + defaultHost + ". Override with -url, CADENCE_URL, or `cadence login`."))
 	fmt.Println(subtle.Render("  Auth token comes from -token, CADENCE_TOKEN, or `cadence login`."))
@@ -484,10 +540,44 @@ func normalizeBaseURL(raw string) (string, error) {
 	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
-func listGoals(c *client) error {
+// parseListFlags handles the shared -json flag for the simple list commands.
+func parseListFlags(name string, args []string) (bool, error) {
+	flags := flag.NewFlagSet(name, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	jsonOutput := flags.Bool("json", false, "Emit machine-readable JSON")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			usage()
+			return false, nil
+		}
+		return false, fmt.Errorf("invalid flags for %s", name)
+	}
+	return *jsonOutput, nil
+}
+
+// printJSON marshals v as indented JSON to stdout.
+func printJSON(v any) error {
+	payload, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(payload))
+	return nil
+}
+
+func listGoals(c *client, args []string) error {
+	jsonOutput, err := parseListFlags("goals", args)
+	if err != nil {
+		return err
+	}
+
 	goals, err := c.fetchGoals()
 	if err != nil {
 		return err
+	}
+
+	if jsonOutput {
+		return printJSON(goals)
 	}
 
 	if len(goals) == 0 {
@@ -529,10 +619,19 @@ func listGoals(c *client) error {
 	return nil
 }
 
-func listTwelveWeekYears(c *client) error {
+func listTwelveWeekYears(c *client, args []string) error {
+	jsonOutput, err := parseListFlags("cycles", args)
+	if err != nil {
+		return err
+	}
+
 	cycles, err := c.fetchTwelveWeekYears()
 	if err != nil {
 		return err
+	}
+
+	if jsonOutput {
+		return printJSON(cycles)
 	}
 
 	if len(cycles) == 0 {
@@ -665,6 +764,8 @@ func todayCommand(c *client, args []string) error {
 	flags.SetOutput(io.Discard)
 
 	date := flags.String("date", "", "Date in YYYY-MM-DD (defaults to today)")
+	slug := flags.String("slug", "", "Only show the goal with this slug (or id)")
+	jsonOutput := flags.Bool("json", false, "Emit machine-readable JSON")
 
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -689,6 +790,14 @@ func todayCommand(c *client, args []string) error {
 		return err
 	}
 
+	if *slug != "" {
+		statuses = filterStatuses(statuses, *slug)
+	}
+
+	if *jsonOutput {
+		return renderTodayJSON(statuses)
+	}
+
 	if len(statuses) == 0 {
 		fmt.Println(lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("245")).Render("No goals found."))
 		return nil
@@ -700,47 +809,19 @@ func todayCommand(c *client, args []string) error {
 
 	rows := make([]table.Row, 0, len(statuses))
 	for _, s := range statuses {
-		status := "✗"
-		if s.Completed {
-			status = "✓"
-		}
-
-		target := fmt.Sprintf("%.2f", s.TargetValue)
-		if s.GoalType == "boolean" {
-			target = "—"
-		}
-
-		value := "—"
-		if s.Value != nil {
-			if s.GoalType == "boolean" || s.GoalType == "duration" {
-				value = s.Value.BoolString()
-				if value == "true" {
-					value = "done"
-				} else if value == "false" {
-					value = "no"
-				}
-			} else {
-				value = s.Value.String()
-			}
-		}
-
 		rows = append(rows, table.Row{
 			s.Name,
-			s.GoalType,
-			s.Frequency,
-			target,
-			status,
-			value,
+			kindLabel(s.kind()),
+			todayProgress(s),
+			todayStatus(s),
 		})
 	}
 
 	columns := []table.Column{
-		{Title: "Goal", Width: 28},
+		{Title: "Goal", Width: 24},
 		{Title: "Type", Width: 10},
-		{Title: "Freq", Width: 14},
-		{Title: "Target", Width: 8},
-		{Title: "Done", Width: 6},
-		{Title: "Value", Width: 8},
+		{Title: "Progress", Width: 16},
+		{Title: "Status", Width: 14},
 	}
 
 	t := table.New(
@@ -764,6 +845,78 @@ func todayCommand(c *client, args []string) error {
 	fmt.Println(muted.Render(fmt.Sprintf("%d / %d goals completed", done, len(statuses))))
 
 	return nil
+}
+
+// filterStatuses narrows the list to a single goal matched by slug or numeric id.
+func filterStatuses(statuses []goalStatus, identifier string) []goalStatus {
+	id, isID := strconv.Atoi(identifier)
+	filtered := make([]goalStatus, 0, 1)
+	for _, s := range statuses {
+		if s.Slug == identifier || (isID == nil && s.ID == id) {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
+}
+
+func renderTodayJSON(statuses []goalStatus) error {
+	items := make([]todayItem, 0, len(statuses))
+	for _, s := range statuses {
+		items = append(items, newTodayItem(s))
+	}
+	payload, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(payload))
+	return nil
+}
+
+// kindLabel turns the machine kind into a compact, human-friendly column label.
+func kindLabel(kind string) string {
+	switch kind {
+	case "pass_fail":
+		return "pass/fail"
+	case "numeric":
+		return "numeric"
+	case "count":
+		return "count"
+	default:
+		return kind
+	}
+}
+
+// todayProgress renders the value/target column per goal kind:
+//   - pass/fail goals have no meaningful magnitude, so show a dash
+//   - numeric and count goals show "value / target unit" (e.g. "105 / 160 g")
+func todayProgress(s goalStatus) string {
+	if s.kind() == "pass_fail" {
+		return "—"
+	}
+
+	value := 0.0
+	if s.Value != nil {
+		value = s.Value.Float()
+	}
+
+	progress := fmt.Sprintf("%s / %s", formatNumber(value), formatNumber(s.TargetValue))
+	if s.Unit != nil && *s.Unit != "" {
+		progress += " " + *s.Unit
+	}
+	return progress
+}
+
+// todayStatus reflects the real completed flag (never contradicts the ✓/✗ glyph).
+func todayStatus(s goalStatus) string {
+	if s.Completed {
+		return "✓ done"
+	}
+	return "✗ incomplete"
+}
+
+// formatNumber prints a float without trailing zeros: 105 not 105.00, 2.5 stays 2.5.
+func formatNumber(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 func (c *client) fetchCompletions(date string) ([]goalStatus, error) {
@@ -979,6 +1132,20 @@ func (value *entryValue) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Float returns the numeric value, parsing a stringified number if needed. It
+// returns 0 for non-numeric or empty values.
+func (value entryValue) Float() float64 {
+	if value.isFloat {
+		return value.float
+	}
+	if value.raw != "" {
+		if f, err := strconv.ParseFloat(value.raw, 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
 func (value entryValue) String() string {
 	if value.isFloat {
 		return fmt.Sprintf("%.2f", value.float)
@@ -1142,6 +1309,7 @@ type cliKeys struct {
 	Goal     key.Binding
 	Date     key.Binding
 	Value    key.Binding
+	Slug     key.Binding
 }
 
 func (k cliKeys) ShortHelp() []key.Binding {
@@ -1151,7 +1319,7 @@ func (k cliKeys) ShortHelp() []key.Binding {
 func (k cliKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Login, k.Logout, k.Goals, k.Cycles, k.Review, k.Complete, k.Today},
-		{k.URL, k.Token, k.ID, k.JSON, k.Goal, k.Date, k.Value},
+		{k.URL, k.Token, k.ID, k.JSON, k.Goal, k.Date, k.Value, k.Slug},
 	}
 }
 
@@ -1199,7 +1367,7 @@ func cliKeyMap() cliKeys {
 		),
 		JSON: key.NewBinding(
 			key.WithKeys("-json"),
-			key.WithHelp("-json", "render raw review JSON"),
+			key.WithHelp("-json", "emit machine-readable JSON (today, goals, cycles, review)"),
 		),
 		Goal: key.NewBinding(
 			key.WithKeys("-goal <id|slug>"),
@@ -1212,6 +1380,10 @@ func cliKeyMap() cliKeys {
 		Value: key.NewBinding(
 			key.WithKeys("-value <number>"),
 			key.WithHelp("-value", "entry value"),
+		),
+		Slug: key.NewBinding(
+			key.WithKeys("-slug <slug|id>"),
+			key.WithHelp("-slug", "filter `today` to a single goal"),
 		),
 	}
 }
