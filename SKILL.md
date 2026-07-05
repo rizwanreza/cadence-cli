@@ -42,7 +42,16 @@ Show goal status for a date (defaults to today):
 ```bash
 ./cadence today
 ./cadence today -date 2026-02-05
+./cadence today -date 2026-02-05 -slug protein   # one goal only
+./cadence today --json                           # machine-readable
 ```
+
+`today --json` returns an array of objects. Each object carries: `id`, `slug`,
+`name`, `goal_type` (real enum), `kind` (`pass_fail` | `numeric` | `count`),
+`frequency`, `target_value`, `date`, `completed`, `value` (JSON number or
+`null`), and `unit` (string or `null`). Filter to a single goal with
+`-slug <slug|id>` — this covers the "single goal for a date" case, so no separate
+command is needed.
 
 Mark a goal complete by slug or id:
 
@@ -70,7 +79,10 @@ Read a 12-week review:
 - `-token` is optional; overrides the saved config and `CADENCE_TOKEN`.
 - `cycles` lists saved 12-week years and their review window state.
 - `review -id` reads the full review document for a cycle.
-- `-json` is useful for agents that want the raw API payload.
+- `-json` emits machine-readable JSON. Supported by `today`, `goals`, `cycles`,
+  and `review`. In `today --json`, `value` is a real number (or `null`) and each
+  goal carries a derived `kind` and optional `unit`.
+- `today -slug <slug|id>` filters the output to a single goal.
 - `-goal` accepts a goal `id` or `slug`.
 - `-date` is optional; must be `YYYY-MM-DD` if provided.
 - `-value` is optional; if omitted, boolean goals default to `1` and numeric goals default to the goal target value.
