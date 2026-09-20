@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -63,19 +64,24 @@ func (c *client) do(req *http.Request) (*http.Response, error) {
 }
 
 type goal struct {
-	ID         int      `json:"id"`
-	Name       string   `json:"name"`
-	Slug       string   `json:"slug"`
-	GoalType   string   `json:"goal_type"`
-	Frequency  string   `json:"frequency"`
-	Target     float64  `json:"target_value"`
-	WeeklyCap  *int     `json:"weekly_cap"`
-	MinValue   *float64 `json:"min_value"`
-	MaxValue   *float64 `json:"max_value"`
-	ActiveDays []int    `json:"active_days"`
-	Active     bool     `json:"active"`
-	Archived   bool     `json:"archived"`
-	Unit       *string  `json:"unit"`
+	ID            int      `json:"id"`
+	Name          string   `json:"name"`
+	Slug          string   `json:"slug"`
+	GoalType      string   `json:"goal_type"`
+	InputKind     string   `json:"input_kind"`
+	ScoringMode   string   `json:"scoring_mode"`
+	Description   string   `json:"description"`
+	DisplayOrder  int      `json:"display_order"`
+	PointsPerUnit float64  `json:"points_per_unit"`
+	Frequency     string   `json:"frequency"`
+	Target        float64  `json:"target_value"`
+	WeeklyCap     *int     `json:"weekly_cap"`
+	MinValue      *float64 `json:"min_value"`
+	MaxValue      *float64 `json:"max_value"`
+	ActiveDays    []int    `json:"active_days"`
+	Active        bool     `json:"active"`
+	Archived      bool     `json:"archived"`
+	Unit          *string  `json:"unit"`
 }
 
 type goalStatus struct {
@@ -83,6 +89,8 @@ type goalStatus struct {
 	Slug        string      `json:"slug"`
 	Name        string      `json:"name"`
 	GoalType    string      `json:"goal_type"`
+	InputKind   string      `json:"input_kind"`
+	ScoringMode string      `json:"scoring_mode"`
 	Frequency   string      `json:"frequency"`
 	TargetValue float64     `json:"target_value"`
 	Unit        *string     `json:"unit"`
@@ -96,6 +104,15 @@ type goalStatus struct {
 // a target above 1 is really a numeric threshold (e.g. hit 160g protein), which
 // reads very differently from a simple yes/no goal.
 func (s goalStatus) kind() string {
+	if s.ScoringMode == "cumulative" || s.GoalType == "count" {
+		return "count"
+	}
+	if s.InputKind == "number" {
+		return "numeric"
+	}
+	if s.InputKind == "checkbox" {
+		return "pass_fail"
+	}
 	switch s.GoalType {
 	case "count":
 		return "count"
@@ -117,6 +134,8 @@ type todayItem struct {
 	Name        string   `json:"name"`
 	GoalType    string   `json:"goal_type"`
 	Kind        string   `json:"kind"`
+	InputKind   string   `json:"input_kind"`
+	ScoringMode string   `json:"scoring_mode"`
 	Frequency   string   `json:"frequency"`
 	TargetValue float64  `json:"target_value"`
 	Date        string   `json:"date"`
@@ -132,6 +151,8 @@ func newTodayItem(s goalStatus) todayItem {
 		Name:        s.Name,
 		GoalType:    s.GoalType,
 		Kind:        s.kind(),
+		InputKind:   s.InputKind,
+		ScoringMode: s.ScoringMode,
 		Frequency:   s.Frequency,
 		TargetValue: s.TargetValue,
 		Date:        s.Date,
@@ -156,6 +177,9 @@ type goalEntry struct {
 
 type twelveWeekYear struct {
 	ID                 int    `json:"id"`
+	Name               string `json:"name"`
+	Status             string `json:"status"`
+	PlanKey            string `json:"plan_key"`
 	StartDate          string `json:"start_date"`
 	EndDate            string `json:"end_date"`
 	ReviewStartsOn     string `json:"review_starts_on"`
@@ -309,11 +333,11 @@ func main() {
 
 	switch args[0] {
 	case "goals":
-		if err := listGoals(c, args[1:]); err != nil {
+		if err := goalsCommand(c, args[1:]); err != nil {
 			fatal(err.Error())
 		}
 	case "cycles":
-		if err := listTwelveWeekYears(c, args[1:]); err != nil {
+		if err := cyclesCommand(c, args[1:]); err != nil {
 			fatal(err.Error())
 		}
 	case "review":
@@ -326,6 +350,10 @@ func main() {
 		}
 	case "today":
 		if err := todayCommand(c, args[1:]); err != nil {
+			fatal(err.Error())
+		}
+	case "score":
+		if err := scoreCommand(c, args[1:]); err != nil {
 			fatal(err.Error())
 		}
 	default:
@@ -514,6 +542,13 @@ func usage() {
 	fmt.Println("  cadence logout")
 	fmt.Println("  cadence goals [-json]")
 	fmt.Println("  cadence cycles [-json]")
+	fmt.Println("  cadence cycles create -key <stable-key> -name <name> -start YYYY-MM-DD [-dry-run] [-json]")
+	fmt.Println("  cadence cycles import -file <plan.json> [-id <draft-id>] [-dry-run] [-json]")
+	fmt.Println("  cadence cycles show|export|activate -id <cycle-id> [-json]")
+	fmt.Println("  cadence cycles update -id <draft-id> [-name <name>] [-start YYYY-MM-DD] [-json]")
+	fmt.Println("  cadence goals add|update -cycle <id> [-goal <id|slug>] -name <name> -input checkbox|number -scoring threshold|cumulative -target <number> -weekly-cap <number> [-unit <unit>] [-notes <notes>] [-json]")
+	fmt.Println("  cadence goals reorder -cycle <id> -order <id,id,...> [-json]")
+	fmt.Println("  cadence score -cycle <id> [-week YYYY-MM-DD] [-as-of YYYY-MM-DD] [-json]")
 	fmt.Println("  cadence review -id <twelve_week_year_id> [-json]")
 	fmt.Println("  cadence complete -goal <id|slug> [-date YYYY-MM-DD] [-value <number>]")
 	fmt.Println("  cadence today [-date YYYY-MM-DD] [-slug <slug|id>] [-json]")
@@ -566,17 +601,20 @@ func printJSON(v any) error {
 }
 
 func listGoals(c *client, args []string) error {
-	jsonOutput, err := parseListFlags("goals", args)
+	flags := flag.NewFlagSet("goals", flag.ContinueOnError)
+	jsonOutput := flags.Bool("json", false, "Emit machine-readable JSON")
+	cycleID := flags.Int("cycle", 0, "Cycle id (including drafts)")
+	date := flags.String("date", "", "Date to select the activated cycle")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	goals, err := c.fetchGoalsFor(*date, *cycleID)
 	if err != nil {
 		return err
 	}
 
-	goals, err := c.fetchGoals()
-	if err != nil {
-		return err
-	}
-
-	if jsonOutput {
+	if *jsonOutput {
 		return printJSON(goals)
 	}
 
@@ -591,9 +629,9 @@ func listGoals(c *client, args []string) error {
 			strconv.Itoa(g.ID),
 			g.Slug,
 			g.Name,
-			g.GoalType,
-			g.Frequency,
-			fmt.Sprintf("%.2f", g.Target),
+			kindLabel(g.status().kind()),
+			weeklyTarget(g),
+			goalTarget(g),
 		})
 	}
 
@@ -602,8 +640,8 @@ func listGoals(c *client, args []string) error {
 		{Title: "Slug", Width: 14},
 		{Title: "Name", Width: 28},
 		{Title: "Type", Width: 10},
-		{Title: "Freq", Width: 10},
-		{Title: "Target", Width: 8},
+		{Title: "Weekly target", Width: 46},
+		{Title: "Target", Width: 18},
 	}
 
 	t := table.New(
@@ -648,8 +686,10 @@ func listTwelveWeekYears(c *client, args []string) error {
 
 		rows = append(rows, table.Row{
 			strconv.Itoa(cycle.ID),
+			cycle.Name,
 			cycle.StartDate,
 			cycle.EndDate,
+			cycle.Status,
 			cycle.ReviewState,
 			visible,
 		})
@@ -657,8 +697,10 @@ func listTwelveWeekYears(c *client, args []string) error {
 
 	columns := []table.Column{
 		{Title: "ID", Width: 4},
+		{Title: "Name", Width: 20},
 		{Title: "Start", Width: 12},
 		{Title: "End", Width: 12},
+		{Title: "Status", Width: 10},
 		{Title: "Review", Width: 14},
 		{Title: "Visible", Width: 8},
 	}
@@ -719,6 +761,7 @@ func completeCommand(c *client, args []string) error {
 	goalIdentifier := flags.String("goal", "", "Goal id or slug")
 	date := flags.String("date", "", "Date in YYYY-MM-DD (defaults to today)")
 	value := flags.String("value", "", "Entry value (optional)")
+	jsonOutput := flags.Bool("json", false, "Emit the recorded entry as JSON")
 
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -740,7 +783,7 @@ func completeCommand(c *client, args []string) error {
 		parsedDate = *date
 	}
 
-	goals, err := c.fetchGoals()
+	goals, err := c.fetchGoalsFor(parsedDate, 0)
 	if err != nil {
 		return err
 	}
@@ -749,12 +792,24 @@ func completeCommand(c *client, args []string) error {
 	if err != nil {
 		return err
 	}
+	if goal.status().kind() != "pass_fail" && *value == "" {
+		return fmt.Errorf("numeric goals require -value; target is %s", goalTarget(goal))
+	}
+	if *value != "" {
+		number, err := strconv.ParseFloat(*value, 64)
+		if err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
+			return fmt.Errorf("-value must be a finite number")
+		}
+	}
 
 	entry, err := c.createEntry(goal.ID, parsedDate, *value)
 	if err != nil {
 		return err
 	}
 
+	if *jsonOutput {
+		return printJSON(map[string]any{"id": entry.ID, "goal_id": entry.GoalID, "date": entry.Date, "value": entry.Value.Float(), "points": entry.Points.Float(), "completed": entry.Completed, "input_kind": goal.InputKind, "scoring_mode": goal.ScoringMode, "target_value": goal.Target, "unit": goal.Unit})
+	}
 	fmt.Println(renderEntrySummary(goal, entry))
 	return nil
 }
@@ -781,8 +836,6 @@ func todayCommand(c *client, args []string) error {
 			return fmt.Errorf("invalid date: %s (expected YYYY-MM-DD)", *date)
 		}
 		parsedDate = *date
-	} else {
-		parsedDate = time.Now().Format("2006-01-02")
 	}
 
 	statuses, err := c.fetchCompletions(parsedDate)
@@ -801,6 +854,9 @@ func todayCommand(c *client, args []string) error {
 	if len(statuses) == 0 {
 		fmt.Println(lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("245")).Render("No goals found."))
 		return nil
+	}
+	if parsedDate == "" {
+		parsedDate = statuses[0].Date
 	}
 
 	accent := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
@@ -876,11 +932,11 @@ func renderTodayJSON(statuses []goalStatus) error {
 func kindLabel(kind string) string {
 	switch kind {
 	case "pass_fail":
-		return "pass/fail"
+		return "yes/no"
 	case "numeric":
-		return "numeric"
+		return "threshold"
 	case "count":
-		return "count"
+		return "cumulative"
 	default:
 		return kind
 	}
@@ -945,7 +1001,22 @@ func (c *client) fetchCompletions(date string) ([]goalStatus, error) {
 }
 
 func (c *client) fetchGoals() ([]goal, error) {
-	req, err := c.newRequest(http.MethodGet, "/api/goals", nil)
+	return c.fetchGoalsFor("", 0)
+}
+
+func (c *client) fetchGoalsFor(date string, cycleID int) ([]goal, error) {
+	query := url.Values{}
+	if date != "" {
+		query.Set("date", date)
+	}
+	if cycleID > 0 {
+		query.Set("cycle_id", strconv.Itoa(cycleID))
+	}
+	path := "/api/goals"
+	if len(query) > 0 {
+		path += "?" + query.Encode()
+	}
+	req, err := c.newRequest(http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1190,16 +1261,13 @@ func (value entryValue) BoolString() string {
 }
 
 func formatEntryValue(goal goal, entry goalEntry) string {
-	if goal.GoalType == "boolean" {
+	if goal.status().kind() == "pass_fail" {
 		return entry.Value.BoolString()
 	}
 	return entry.Value.String()
 }
 
 func formatEntryPoints(goal goal, entry goalEntry) string {
-	if goal.GoalType == "boolean" {
-		return entry.Points.BoolString()
-	}
 	return entry.Points.FloatString()
 }
 
@@ -1208,20 +1276,13 @@ func renderEntrySummary(goal goal, entry goalEntry) string {
 	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
 	date := dateStyle.Render(entry.Date)
-	switch goal.GoalType {
-	case "boolean":
-		return fmt.Sprintf("%s goal marked as done for %s.", accent.Render(goal.Name), date)
-	case "duration":
-		return fmt.Sprintf("%s minutes marked under %s goal for %s.",
-			accent.Render(formatEntryValue(goal, entry)),
-			accent.Render(goal.Name),
-			date)
-	default:
-		return fmt.Sprintf("%s recorded under %s goal for %s.",
-			accent.Render(formatEntryValue(goal, entry)),
-			accent.Render(goal.Name),
-			date)
+	status := goal.status()
+	status.Value = &entry.Value
+	status.Completed = entry.Completed
+	if status.kind() == "pass_fail" {
+		return fmt.Sprintf("%s: %s for %s.", accent.Render(goal.Name), todayStatus(status), date)
 	}
+	return fmt.Sprintf("%s: %s — %s for %s.", accent.Render(goal.Name), todayProgress(status), todayStatus(status), date)
 }
 
 func renderReviewSummary(review reviewResponse) string {
@@ -1290,6 +1351,12 @@ func tableStyles() table.Styles {
 }
 
 func fatal(message string) {
+	for _, arg := range os.Args[1:] {
+		if arg == "-json" || arg == "--json" {
+			_ = json.NewEncoder(os.Stderr).Encode(map[string]any{"errors": []string{message}})
+			os.Exit(1)
+		}
+	}
 	fmt.Fprintln(os.Stderr, message)
 	os.Exit(1)
 }

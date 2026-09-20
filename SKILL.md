@@ -85,9 +85,28 @@ Read a 12-week review:
 - `today -slug <slug|id>` filters the output to a single goal.
 - `-goal` accepts a goal `id` or `slug`.
 - `-date` is optional; must be `YYYY-MM-DD` if provided.
-- `-value` is optional; if omitted, boolean goals default to `1` and numeric goals default to the goal target value.
+- `-value` is required for numeric goals; only yes/no goals default to `1`.
 
 ## Troubleshooting
 - `unauthorized` errors mean the token is missing or invalid — run `./cadence login` with a fresh token from Settings → CLI Access.
 - If goals are missing, confirm the server is running and you have an active 12-week cycle.
 - If you get a `422` on dates, ensure `-date` is ISO8601 (`YYYY-MM-DD`).
+
+## Draft cycle plans
+
+Use the versioned JSON contract and examples in [README.md](README.md) and
+[examples/next-cycle-18-goals.json](examples/next-cycle-18-goals.json).
+
+- Preview: `cadence cycles import -file plan.json -dry-run -json`.
+- Save: `cadence cycles import -file plan.json -json`. Stable `plan_key` and goal
+  keys make identical retries safe; changed content requires `-id <draft-id>`.
+- Inspect/export: `cadence cycles show|export -id <id>`.
+- Edit: `cadence goals update -cycle <id> -goal <key> -target 20 -weekly-cap 4`.
+- Order: `cadence goals reorder -cycle <id> -order <every-goal-id,in-order>`.
+- Activation is a distinct authorized action: `cadence cycles activate -id <id>`.
+  It is permitted only during the cycle date range, rejects overlaps, and locks
+  goal definitions. Notes remain editable. Never activate as an import side effect.
+- Numeric logging requires `-value`; count and legacy duration logging increments
+  rather than replaces the day's total. Do not blindly retry those progress writes.
+- `cadence score -cycle <id> [-week YYYY-MM-DD] [-as-of YYYY-MM-DD] -json`
+  reads the full-week execution snapshot; pace and projection are separate metrics.

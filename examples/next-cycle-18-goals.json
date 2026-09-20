@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "plan_key": "example-2026-10-cycle",
+  "name": "Next 12 weeks",
+  "start_date": "2026-10-01",
+  "notes": "Illustrative plan: replace these goals with your agreed plan before importing.",
+  "goals": [
+    {
+      "key": "meditation",
+      "name": "Meditation",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 10,
+      "unit": "min",
+      "weekly_cap": 7,
+      "description": "Mindful breathing."
+    },
+    {
+      "key": "reading",
+      "name": "Reading or audiobooks",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 20,
+      "unit": "min",
+      "weekly_cap": 4,
+      "description": "Audiobooks count. Four scored days; extra days are optional."
+    },
+    {
+      "key": "focused-work",
+      "name": "Focused work",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 60,
+      "unit": "min",
+      "weekly_cap": 5,
+      "description": "One focused block."
+    },
+    {
+      "key": "protein",
+      "name": "Protein",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 160,
+      "unit": "g",
+      "weekly_cap": 7,
+      "description": "Total grams for the day."
+    },
+    {
+      "key": "workout",
+      "name": "Workout",
+      "input_kind": "checkbox",
+      "scoring_mode": "threshold",
+      "target_value": 1,
+      "unit": null,
+      "weekly_cap": 4,
+      "description": "Any planned workout."
+    },
+    {
+      "key": "walk",
+      "name": "Walk",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 30,
+      "unit": "min",
+      "weekly_cap": 5,
+      "description": ""
+    },
+    {
+      "key": "stretch",
+      "name": "Stretch",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 10,
+      "unit": "min",
+      "weekly_cap": 4,
+      "description": ""
+    },
+    {
+      "key": "journal",
+      "name": "Journal",
+      "input_kind": "checkbox",
+      "scoring_mode": "threshold",
+      "target_value": 1,
+      "unit": null,
+      "weekly_cap": 4,
+      "description": ""
+    },
+    {
+      "key": "plan-tomorrow",
+      "name": "Plan tomorrow",
+      "input_kind": "checkbox",
+      "scoring_mode": "threshold",
+      "target_value": 1,
+      "unit": null,
+      "weekly_cap": 5,
+      "description": ""
+    },
+    {
+      "key": "water",
+      "name": "Drink water",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 8,
+      "unit": "glasses",
+      "weekly_cap": 7,
+      "description": ""
+    },
+    {
+      "key": "practice",
+      "name": "Practice a skill",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 20,
+      "unit": "min",
+      "weekly_cap": 4,
+      "description": ""
+    },
+    {
+      "key": "family-time",
+      "name": "Family time",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 30,
+      "unit": "min",
+      "weekly_cap": 5,
+      "description": ""
+    },
+    {
+      "key": "tidy",
+      "name": "Tidy workspace",
+      "input_kind": "checkbox",
+      "scoring_mode": "threshold",
+      "target_value": 1,
+      "unit": null,
+      "weekly_cap": 3,
+      "description": ""
+    },
+    {
+      "key": "sleep-routine",
+      "name": "Sleep routine",
+      "input_kind": "checkbox",
+      "scoring_mode": "threshold",
+      "target_value": 1,
+      "unit": null,
+      "weekly_cap": 7,
+      "description": ""
+    },
+    {
+      "key": "language",
+      "name": "Learn a language",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 10,
+      "unit": "min",
+      "weekly_cap": 4,
+      "description": ""
+    },
+    {
+      "key": "creative",
+      "name": "Creative work",
+      "input_kind": "number",
+      "scoring_mode": "threshold",
+      "target_value": 20,
+      "unit": "min",
+      "weekly_cap": 3,
+      "description": ""
+    },
+    {
+      "key": "reflection",
+      "name": "Weekly reflection",
+      "input_kind": "checkbox",
+      "scoring_mode": "threshold",
+      "target_value": 1,
+      "unit": null,
+      "weekly_cap": 1,
+      "description": ""
+    },
+    {
+      "key": "deep-work-sessions",
+      "name": "Deep work sessions",
+      "input_kind": "number",
+      "scoring_mode": "cumulative",
+      "target_value": 1,
+      "unit": "sessions",
+      "weekly_cap": 10,
+      "description": "Cumulative sessions; weekly point cap 10."
+    }
+  ]
+}
