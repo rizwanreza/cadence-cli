@@ -69,7 +69,7 @@ func TestEntrySummaryThresholds(t *testing.T) {
 	}
 }
 
-func TestCompleteRequiresNumericValueBeforeWriting(t *testing.T) {
+func TestCompleteRejectsNumericGoalsBeforeWriting(t *testing.T) {
 	writes := 0
 	c := mockClient(func(r *http.Request) string {
 		if r.Method != http.MethodGet {
@@ -78,7 +78,7 @@ func TestCompleteRequiresNumericValueBeforeWriting(t *testing.T) {
 		return `[{"id":1,"slug":"reading","name":"Reading","goal_type":"boolean","input_kind":"number","scoring_mode":"threshold","target_value":20,"unit":"min"}]`
 	})
 	_, err := captureCommand(t, func() error { return completeCommand(c, []string{"-goal", "reading"}) })
-	if err == nil || !strings.Contains(err.Error(), "require -value") {
+	if err == nil || !strings.Contains(err.Error(), "complete only supports checkbox") {
 		t.Fatalf("expected explicit numeric value error, got %v", err)
 	}
 	if writes != 0 {
@@ -86,7 +86,7 @@ func TestCompleteRequiresNumericValueBeforeWriting(t *testing.T) {
 	}
 }
 
-func TestCompleteUsesHistoricalCycleAndJSONNumericResult(t *testing.T) {
+func TestSetUsesHistoricalCycleAndJSONNumericResult(t *testing.T) {
 	c := mockClient(func(r *http.Request) string {
 		if r.Method == http.MethodGet {
 			if r.URL.Query().Get("date") != "2026-09-10" {
@@ -94,13 +94,13 @@ func TestCompleteUsesHistoricalCycleAndJSONNumericResult(t *testing.T) {
 			}
 			return `[{"id":17,"slug":"reading","name":"Reading","goal_type":"boolean","input_kind":"number","scoring_mode":"threshold","target_value":20,"unit":"min"}]`
 		}
-		if r.URL.Path != "/api/goals/17/entries" {
+		if r.URL.Path != "/api/goals/17/entries/2026-09-10" || r.Method != http.MethodPut {
 			t.Fatalf("wrong historical goal: %s", r.URL.Path)
 		}
 		return `{"id":8,"goal_id":17,"date":"2026-09-10","value":15,"points":0,"completed":false}`
 	})
 	output, err := captureCommand(t, func() error {
-		return completeCommand(c, []string{"-goal", "reading", "-date", "2026-09-10", "-value", "15", "-json"})
+		return numericEntryCommand(c, "set", []string{"-goal", "reading", "-date", "2026-09-10", "-value", "15", "-json"})
 	})
 	if err != nil {
 		t.Fatal(err)

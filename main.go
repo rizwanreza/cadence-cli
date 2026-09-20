@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -167,12 +166,14 @@ func newTodayItem(s goalStatus) todayItem {
 }
 
 type goalEntry struct {
-	ID        int        `json:"id"`
-	GoalID    int        `json:"goal_id"`
-	Date      string     `json:"date"`
-	Value     entryValue `json:"value"`
-	Completed bool       `json:"completed"`
-	Points    entryValue `json:"points"`
+	Operation     string      `json:"operation"`
+	PreviousValue *entryValue `json:"previous_value"`
+	ID            int         `json:"id"`
+	GoalID        int         `json:"goal_id"`
+	Date          string      `json:"date"`
+	Value         entryValue  `json:"value"`
+	Completed     bool        `json:"completed"`
+	Points        entryValue  `json:"points"`
 }
 
 type twelveWeekYear struct {
@@ -342,6 +343,10 @@ func main() {
 		}
 	case "review":
 		if err := reviewCommand(c, args[1:]); err != nil {
+			fatal(err.Error())
+		}
+	case "set", "add":
+		if err := numericEntryCommand(c, args[0], args[1:]); err != nil {
 			fatal(err.Error())
 		}
 	case "complete":
@@ -550,7 +555,9 @@ func usage() {
 	fmt.Println("  cadence goals reorder -cycle <id> -order <id,id,...> [-json]")
 	fmt.Println("  cadence score -cycle <id> [-week YYYY-MM-DD] [-as-of YYYY-MM-DD] [-json]")
 	fmt.Println("  cadence review -id <twelve_week_year_id> [-json]")
-	fmt.Println("  cadence complete -goal <id|slug> [-date YYYY-MM-DD] [-value <number>]")
+	fmt.Println("  cadence complete -goal <checkbox-id|slug> [-date YYYY-MM-DD] [-value 0|1] [-json]")
+	fmt.Println("  cadence set -goal <id|slug> -value <total> [-date YYYY-MM-DD] [-json]")
+	fmt.Println("  cadence add -goal <id|slug> -value <amount> [-date YYYY-MM-DD] [-json]")
 	fmt.Println("  cadence today [-date YYYY-MM-DD] [-slug <slug|id>] [-json]")
 	fmt.Println()
 	fmt.Println(subtle.Render("  Defaults to " + defaultHost + ". Override with -url, CADENCE_URL, or `cadence login`."))
@@ -760,7 +767,7 @@ func completeCommand(c *client, args []string) error {
 
 	goalIdentifier := flags.String("goal", "", "Goal id or slug")
 	date := flags.String("date", "", "Date in YYYY-MM-DD (defaults to today)")
-	value := flags.String("value", "", "Entry value (optional)")
+	value := flags.String("value", "", "Checkbox value: 0 or 1 (default 1)")
 	jsonOutput := flags.Bool("json", false, "Emit the recorded entry as JSON")
 
 	if err := flags.Parse(args); err != nil {
@@ -792,14 +799,11 @@ func completeCommand(c *client, args []string) error {
 	if err != nil {
 		return err
 	}
-	if goal.status().kind() != "pass_fail" && *value == "" {
-		return fmt.Errorf("numeric goals require -value; target is %s", goalTarget(goal))
+	if goal.status().kind() != "pass_fail" {
+		return fmt.Errorf("complete only supports checkbox goals; no value was written. For %s, use `cadence add -goal %s -value <amount>` to increase the total, or `cadence set -goal %s -value <total>` to replace it", goal.Name, goal.Slug, goal.Slug)
 	}
-	if *value != "" {
-		number, err := strconv.ParseFloat(*value, 64)
-		if err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
-			return fmt.Errorf("-value must be a finite number")
-		}
+	if *value != "" && *value != "0" && *value != "1" {
+		return fmt.Errorf("checkbox -value must be 0 or 1")
 	}
 
 	entry, err := c.createEntry(goal.ID, parsedDate, *value)
@@ -1369,6 +1373,7 @@ type cliKeys struct {
 	Review   key.Binding
 	Complete key.Binding
 	Today    key.Binding
+	Numeric  key.Binding
 	URL      key.Binding
 	Token    key.Binding
 	ID       key.Binding
@@ -1380,12 +1385,12 @@ type cliKeys struct {
 }
 
 func (k cliKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.Login, k.Goals, k.Cycles, k.Review, k.Complete, k.Today}
+	return []key.Binding{k.Login, k.Goals, k.Cycles, k.Review, k.Complete, k.Numeric, k.Today}
 }
 
 func (k cliKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Login, k.Logout, k.Goals, k.Cycles, k.Review, k.Complete, k.Today},
+		{k.Login, k.Logout, k.Goals, k.Cycles, k.Review, k.Complete, k.Numeric, k.Today},
 		{k.URL, k.Token, k.ID, k.JSON, k.Goal, k.Date, k.Value, k.Slug},
 	}
 }
@@ -1414,7 +1419,11 @@ func cliKeyMap() cliKeys {
 		),
 		Complete: key.NewBinding(
 			key.WithKeys("complete"),
-			key.WithHelp("complete", "log progress"),
+			key.WithHelp("complete", "check off a yes/no goal"),
+		),
+		Numeric: key.NewBinding(
+			key.WithKeys("set/add"),
+			key.WithHelp("set/add", "replace a numeric total / add to it"),
 		),
 		Today: key.NewBinding(
 			key.WithKeys("today"),
@@ -1434,7 +1443,7 @@ func cliKeyMap() cliKeys {
 		),
 		JSON: key.NewBinding(
 			key.WithKeys("-json"),
-			key.WithHelp("-json", "emit machine-readable JSON (today, goals, cycles, review)"),
+			key.WithHelp("-json", "emit machine-readable JSON"),
 		),
 		Goal: key.NewBinding(
 			key.WithKeys("-goal <id|slug>"),

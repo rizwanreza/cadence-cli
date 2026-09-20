@@ -1,7 +1,7 @@
 # Skill: Cadence CLI
 
 ## When to use
-- Use this skill when you need to list goals, inspect 12-week cycles, read a 12-week review, or mark a goal as complete from the command line.
+- Use this skill when you need to list goals, inspect 12-week cycles, read a 12-week review, or log goal progress from the command line.
 - The CLI talks to the Cadence API endpoints for goals, goal entries, completions, and 12-week year reviews.
 
 ## CLI location
@@ -53,13 +53,28 @@ Show goal status for a date (defaults to today):
 `-slug <slug|id>` — this covers the "single goal for a date" case, so no separate
 command is needed.
 
-Mark a goal complete by slug or id:
+Complete checkbox goals or explicitly set/add numeric progress:
 
 ```bash
-./cadence complete -goal meditation
+./cadence complete -goal workout
 ./cadence complete -goal 3 -date 2026-02-05
-./cadence complete -goal deep_work -value 2
+./cadence add -goal deep_work -value 2
+./cadence set -goal protein -value 113
+./cadence add -goal protein -value 40
 ```
+
+`complete` only accepts checkbox goals (optional `-value 0` unchecks).
+Numeric goals, including threshold, count, and duration, require explicit
+`set -value <total>` or `add -value <positive amount>`. `set` replaces the total;
+`add` applies an atomic server increment. Never read, calculate, then set a total
+to simulate adding: concurrent updates can be lost. A timed-out add may already
+have succeeded; inspect `today` before retrying. Repeating `set` is idempotent.
+
+If commands are missing, rebuild/install the current CLI as described in
+[README.md](README.md), check `command -v cadence` and `cadence -help`, and ensure
+the server has the new entry/increment resources. Do not use the old `complete`
+command as a fallback for numeric writes. CLI installation does not deploy the
+server. `set/add -json` include previous and final numeric values.
 
 List available 12-week years:
 
@@ -80,7 +95,7 @@ Read a 12-week review:
 - `cycles` lists saved 12-week years and their review window state.
 - `review -id` reads the full review document for a cycle.
 - `-json` emits machine-readable JSON. Supported by `today`, `goals`, `cycles`,
-  and `review`. In `today --json`, `value` is a real number (or `null`) and each
+  `review`, `set`, `add`, and `complete`. In `today --json`, `value` is a real number (or `null`) and each
   goal carries a derived `kind` and optional `unit`.
 - `today -slug <slug|id>` filters the output to a single goal.
 - `-goal` accepts a goal `id` or `slug`.

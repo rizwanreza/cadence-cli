@@ -3,12 +3,34 @@
 Track goals and log progress from the terminal. The CLI talks to the Cadence
 JSON API and authenticates as a real user with a personal API token.
 
-## Build
+## Build and update your installed CLI
 
 ```bash
 cd cli
 go build -o cadence
+./cadence -help
 ```
+
+Building `./cadence` does not replace an older `cadence` on your PATH. Install
+this checked-out source to your chosen binary directory, then verify the command
+that your shell resolves:
+
+```bash
+# From cli/; choose a writable directory already on your PATH.
+GOBIN="$HOME/.local/bin" go install .
+export PATH="$HOME/.local/bin:$PATH"
+command -v cadence
+cadence -help             # Must list set, add, complete, and today.
+```
+
+If your existing binary is elsewhere (for example `/opt/homebrew/bin/cadence`),
+update that installation or put the new binary first on PATH. Restart the shell
+or clear its command cache if it still runs an older binary. `sh test-install.sh`
+validates installation and command dispatch in a temporary directory.
+
+The server must also include the numeric entry resources described below.
+Updating the CLI alone does not update a deployed server. A missing endpoint is
+an error; the CLI never falls back to an ambiguous legacy write.
 
 ## Authentication
 
@@ -122,13 +144,57 @@ Read a 12-week review by cycle id:
 ./cadence review -id 3 -json
 ```
 
-Mark a goal complete by slug or id (optional date/value):
+Log a numeric goal with an explicit operation:
 
 ```bash
-./cadence complete -goal meditation
-./cadence complete -goal 3 -date 2026-02-05
-./cadence complete -goal deep_work -value 2
+./cadence set -goal protein -date 2026-06-24 -value 73
+./cadence add -goal protein -date 2026-06-24 -value 40
+# Added 40 (73 → 113). Protein: 113 / 160 g — ✗ incomplete for 2026-06-24.
+./cadence set -goal protein -date 2026-06-24 -value 40
+# Set total (113 → 40). Protein: 40 / 160 g — ✗ incomplete for 2026-06-24.
+./cadence today -date 2026-06-24 -slug protein
 ```
+
+`set` replaces the daily total, including zero to clear progress. Repeating a
+set with the same value leaves the same total. `add` increases the daily total
+by a positive amount, creating the day's entry if necessary. Decimal values are
+supported. The server applies additions atomically, so concurrent additions
+cannot overwrite one another. Each successful add is a new addition: if a
+request times out, check `today` before manually retrying it. Goal bounds still
+apply; a rejected write leaves existing progress unchanged.
+
+Use `complete` for checkbox goals:
+
+```bash
+./cadence complete -goal workout
+./cadence complete -goal workout -date 2026-06-24
+./cadence complete -goal workout -value 0  # Uncheck it.
+```
+
+**Migration:** numeric `complete` is now rejected without writing, even when
+`-value` is provided. This includes threshold, count, and legacy duration goals.
+Replace previous threshold `complete -value <total>` calls with `set`; replace
+count/duration increment calls with `add`. To add a meal's protein, use `add`;
+to correct the day's protein total, use `set`.
+
+`set`, `add`, and `complete` accept `-json`. Numeric responses include numeric
+`previous_value` (or null for a new entry), final `value`, `operation`, completion,
+points, target, unit, and modes. Omitted dates use the account timezone; explicit
+dates select the activated cycle covering that day.
+
+### Numeric API resources
+
+- `PUT /api/goals/:goal_id/entries/:date` with `{"goal_entry":{"value":113}}`
+  replaces a numeric total.
+- `POST /api/goals/:goal_id/entries/:date/increments` with
+  `{"increment":{"value":40}}` adds to a numeric total.
+
+`:date` is `YYYY-MM-DD` or `today` in the authenticated account's timezone.
+Both routes require authentication and an activated cycle containing that date.
+The response contains `previous_value`, final `value`, and `operation`.
+The legacy `POST /api/goals/:goal_id/entries` API remains compatible: boolean
+replaces, count/duration add. Its increments now use the same atomic write lock.
+New clients should use the explicit resources.
 
 ## Notes
 
@@ -137,7 +203,7 @@ Mark a goal complete by slug or id (optional date/value):
 - `cycles` lists saved 12-week years and whether the review window is visible in app.
 - `review -id` reads the full review payload for one 12-week year.
 - `-json` renders machine-readable JSON for agents and automation. Supported by
-  `today`, `goals`, `cycles`, and `review`.
+  `today`, `goals`, `cycles`, `review`, `set`, `add`, and `complete`.
 - `today` additionally accepts `-slug <slug|id>` to filter to a single goal.
 - `-date` expects `YYYY-MM-DD` if provided.
 - Numeric goals require `-value`; only yes/no goals default to `1`.
@@ -212,14 +278,15 @@ key and start date. Review the dry run before saving:
 - Threshold `weekly_cap` is the number of scored days, 1–7. Additional days are
   optional and do not raise the weekly score. Cumulative `weekly_cap` remains
   a weekly point cap and can exceed 7; `points_per_unit` defaults to 1.
-- Numeric CLI logging requires an explicit value. `complete -goal reading -value
-  15` reports **15 / 20 min, incomplete**; `-value 20` reports complete.
-- Boolean entry writes replace the day's value. Count and legacy duration entry
-  writes **add** to the day's existing value. These legacy API semantics remain
-  unchanged; do not retry cumulative logging blindly. Only plan creation/import
-  and activation have the retry guarantees described above.
+- Numeric CLI logging requires `set` or `add` and an explicit value.
+  `set -goal reading -value 15` reports **15 / 20 min, incomplete**;
+  `set -goal reading -value 20` reports complete.
+- The legacy POST entry API still replaces boolean values and **adds** count
+  and duration values. `set` is idempotent; `add` and legacy cumulative POST
+  writes must not be retried blindly. Plan creation/import and activation retain
+  the retry guarantees described above.
 - `complete -json` emits numeric values, completion, target, unit, and modes.
-  `today` without a date uses the account timezone. Historical `complete -date`
+  `today` without a date uses the account timezone. Historical logging with `-date`
   resolves goals in the cycle containing that date.
 - Weekly execution means points earned against the **full week target**, capped
   per goal. Pace and Sunday projection are separate values. `score -cycle 42
