@@ -352,7 +352,7 @@ func scoreCommand(c *client, args []string) error {
 		return printJSON(result)
 	}
 	fmt.Printf("Weekly execution: %v%% (%v / %v points)\n", result["execution_percentage"], result["total_points"], result["max_possible_points"])
-	fmt.Printf("Pace: %v%%; Sunday projection: %v%%\n", result["pace_percentage"], result["projected_execution_percentage"])
+	fmt.Printf("Pace: %v%%; tier: %v\n", result["pace_percentage"], result["rating"])
 	fmt.Printf("Cycle %d, %v to %v; snapshot %v\n", *cycleID, result["period_start_date"], result["period_end_date"], result["as_of_date"])
 	return nil
 }

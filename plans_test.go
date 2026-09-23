@@ -172,13 +172,13 @@ func TestScoreRendersServerSnapshotWithoutRecalculation(t *testing.T) {
 		if r.URL.Path != "/api/twelve_week_years/3/scorecard" || r.URL.Query().Get("as_of_date") != "2026-09-19" {
 			t.Fatalf("unexpected score request: %s", r.URL)
 		}
-		return `{"execution_percentage":57.1,"total_points":4,"max_possible_points":7,"pace_percentage":80,"projected_execution_percentage":80,"period_start_date":"2026-09-14","period_end_date":"2026-09-20","as_of_date":"2026-09-19"}`
+		return `{"execution_percentage":57.1,"total_points":4,"max_possible_points":7,"pace_percentage":80,"rating":"Strong","period_start_date":"2026-09-14","period_end_date":"2026-09-20","as_of_date":"2026-09-19"}`
 	})
 	output, err := captureCommand(t, func() error { return scoreCommand(c, []string{"-cycle", "3", "-as-of", "2026-09-19"}) })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output, "57.1% (4 / 7 points)") || !strings.Contains(output, "Pace: 80%") {
+	if !strings.Contains(output, "57.1% (4 / 7 points)") || !strings.Contains(output, "Pace: 80%; tier: Strong") {
 		t.Fatal(output)
 	}
 }
