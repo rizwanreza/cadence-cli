@@ -23,7 +23,9 @@ here changes the user's real data.
    "Monday" etc. from it and pass `--date YYYY-MM-DD` explicitly.
 4. **Never blindly retry `add`.** Each `add` is a new addition. If one timed out
    (exit 6), check `cadence today --date <d> --json` before doing anything, or
-   retry with the same `--idempotency-key` you used the first time. `set` and
+   retry with the same `--idempotency-key` (the failed call's error names it;
+   `--json` output includes `idempotency_key`). A replayed add reports
+   `"replayed": true` and adds nothing. `set` and
    `complete` are safe to repeat.
 5. **Confirm before irreversible or lifecycle actions.** Ask the user before
    `cycles activate`, `goals archive`, `cycles fresh-start` (and activating its
@@ -79,13 +81,15 @@ you happened.
 ### How's my week?
 
 ```bash
-cadence score --json      # execution %, pace, tier, per-goal numbers, risk, leverage, streaks
+cadence score --json      # execution %, pace, tier, per-goal numbers, and risk/leverage/streaks
+                          # alerts ({message, goals|goal|streaks} or null)
 cadence insight --json    # coaching: assessment, guidance, risk, leverage
 ```
 
 Execution is points earned against the full week's target (capped per goal);
 `pace_percentage` is how the week is tracking so far. Tiers: Reset <60,
-Building 60-69, Steady 70-79, Strong 80-89, Elite 90+. If `insight.stale` is
+Building 60-69, Steady 70-79, Strong 80-89, Elite 90+ (by pace while the week
+runs, by execution once it's over). If `insight.stale` is
 true a fresher one is generating; the current text is still fine to use.
 Lead with the one or two actions that matter today.
 
@@ -113,28 +117,35 @@ Lead with the one or two actions that matter today.
 1. `cadence review --json` (defaults to the cycle awaiting review): execution,
    grade, best/worst weeks, per-goal trends, learnings and six prompts, each
    with a `system_insight`.
-2. Walk through the prompts, sharing the insight for each:
-   `--drove` (what made the strongest weeks work), `--limited` (what reduced
-   execution), `--redesign` (which goal needs a better design, not more
-   discipline), `--carry-forward` (what should stay exactly the same),
-   `--adjustment` (the single change for the next 12 weeks),
-   `--closing-notes` (anything else to remember).
-3. Save as you go: `cadence cycles review set --drove "..." --adjustment "..." --json`.
+2. Walk through the prompts, sharing the insight for each. Each maps to a flag:
+   - `--what-drove-results`: what made the strongest weeks work?
+   - `--what-limited-execution`: what most often reduced execution?
+   - `--what-needs-redesign`: which goal needs a better design, not more discipline?
+   - `--what-to-carry-forward`: what should stay exactly the same?
+   - `--next-cycle-adjustment`: the single change for the next 12 weeks
+   - `--closing-notes`: anything else to remember
+3. Save as you go (any subset; saved answers are kept). Saving closes the
+   cycle out, so it stops showing as `awaiting_review`:
+   `cadence cycles review set --what-drove-results "..." --next-cycle-adjustment "..." --json`.
 4. Then offer to plan the next cycle. Only if the user explicitly wants to skip
    the review: `cadence cycles review dismiss` (confirm first).
 
 ### Plan the next cycle (`final_stretch`, after a review, or `no_active_cycle`)
 
 1. Discuss which goals continue, change or stop (use the review's
-   `--redesign` and `--carry-forward` answers).
+   `what_needs_redesign` and `what_to_carry_forward` answers).
 2. Draft it. Nothing is activated yet:
    ```bash
    cadence cycles next --start after --json          # right after the current cycle ends
    cadence cycles next --start after-13th --json     # take a 13th week to rest and plan first
    cadence cycles next --start today --json          # only once the cycle has ended
    cadence cycles next --start after --goals reading,protein --json   # carry only some goals
+   cadence cycles next --start after --blank --json  # no goals carried
    ```
-   If a draft already exists it is returned instead of a second one.
+   Leave out `--start` to get the first option available. An option that isn't
+   available fails (exit 5) with a message naming the ones that are.
+   If a draft already exists it is returned (`carry_forward: null`) instead of a
+   second one; if the next cycle is already scheduled you get exit 5.
    `carry_forward.invalid` lists goals that couldn't be copied; tell the user.
 3. Edit the draft: `cadence goals add|update|archive --cycle <draft-id> ...` and
    `cadence goals reorder --cycle <id> --order <every-id,in,order>`.
@@ -209,7 +220,7 @@ cadence review [--id ID]                                  # end-of-cycle review
 cadence cycles [show|export|notes] [--id ID]
 cadence cycles create|import|update ... [--dry-run]
 cadence cycles activate --id ID                           # confirm first
-cadence cycles next --start after|today|after-13th [--id ID] [--goals a,b]
+cadence cycles next [--start after|today|after-13th] [--id ID] [--goals a,b | --blank]
 cadence cycles unschedule --id ID                         # confirm first
 cadence cycles fresh-start [--goals a,b] | cycles fresh-start dismiss
 cadence cycles review show|set|dismiss [--id ID]
