@@ -49,6 +49,8 @@ checksum:
   algorithm: sha256
 
 release:
+  # -rc/-beta tags publish as prereleases, so releases/latest (and /install-cli) skip them.
+  prerelease: auto
   github:
     owner: rizwanreza
     name: cadence-cli

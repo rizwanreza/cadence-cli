@@ -13,6 +13,7 @@ server=$!
 trap 'kill $server 2>/dev/null; rm -rf "$tmp"' EXIT
 sleep 1
 
+# shellcheck disable=SC2119,SC2120 # extra env assignments are optional
 run() {
   env -i PATH=/usr/bin:/bin HOME="$tmp/home" SHELL=/bin/bash \
     CADENCE_VERSION="$version" CADENCE_DOWNLOAD_BASE="http://127.0.0.1:$port" "$@" \
@@ -30,7 +31,8 @@ rc="$tmp/home/.bashrc"
 # A tampered checksum must abort before installing.
 mkdir -p "$tmp/bad"
 cp dist/*.tar.gz "$tmp/bad/"
-sed 's/^./0/' dist/checksums.txt >"$tmp/bad/checksums.txt"
+# Replace every hash outright (flipping one character is a no-op when it already matches).
+awk '{print "0000000000000000000000000000000000000000000000000000000000000000  " $2}' dist/checksums.txt >"$tmp/bad/checksums.txt"
 (cd "$tmp/bad" && exec python3 -m http.server $((port + 1)) >/dev/null 2>&1) &
 bad=$!
 sleep 1
