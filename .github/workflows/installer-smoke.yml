@@ -1,0 +1,27 @@
+name: Installer smoke test
+
+# Installs the published latest release the way users do, then runs it.
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install with curl | bash
+        run: curl -fsSL https://raw.githubusercontent.com/rizwanreza/cadence-cli/main/scripts/install.sh | bash
+      - name: Run it
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          cadence version
+          cadence --help
+          test -f "$HOME/.agents/skills/cadence/SKILL.md"
