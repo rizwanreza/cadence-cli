@@ -224,7 +224,8 @@ request that timed out and the server will not apply it twice.`
 			before = formatNumber(entry.PreviousValue.Float())
 		}
 		if replayed {
-			a.println(mutedStyle.Render("Already applied earlier with this idempotency key; nothing was added again."))
+			a.printf("Already added earlier with this idempotency key; nothing changed. %s\n", renderEntrySummary(g, entry))
+			return nil
 		}
 		if operation == "add" {
 			a.printf("Added %s (%s → %s). %s\n", formatNumber(value), before, formatNumber(entry.Value.Float()), renderEntrySummary(g, entry))
