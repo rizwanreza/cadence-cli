@@ -518,22 +518,17 @@ func (a *App) resolveGoalIDs(c *api.Client, cycleID int, list string) ([]int, er
 	if list == "" {
 		return nil, nil
 	}
-	var goals []api.Goal
+	// Always resolve against the cycle's goals so a typo'd id fails loudly
+	// instead of silently carrying nothing.
+	goals, err := c.Goals(a.ctx(), "", cycleID)
+	if err != nil {
+		return nil, err
+	}
 	ids := []int{}
 	for _, raw := range strings.Split(list, ",") {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			continue
-		}
-		if id, err := strconv.Atoi(raw); err == nil {
-			ids = append(ids, id)
-			continue
-		}
-		if goals == nil {
-			var err error
-			if goals, err = c.Goals(a.ctx(), "", cycleID); err != nil {
-				return nil, err
-			}
 		}
 		g, err := matchGoal(goals, raw)
 		if err != nil {

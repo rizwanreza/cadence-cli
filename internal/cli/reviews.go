@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/table"
+
 	"github.com/rizwanreza/cadence-cli/internal/api"
 	"github.com/spf13/cobra"
 )
@@ -85,8 +87,29 @@ active cycle.`,
 			a.printf("Weekly execution: %v%% (%v / %v points)\n", result["execution_percentage"], result["total_points"], result["max_possible_points"])
 			a.printf("Pace: %v%%; tier: %v\n", result["pace_percentage"], result["rating"])
 			a.printf("Cycle %d, %v to %v; snapshot %v\n", cycleID, result["period_start_date"], result["period_end_date"], result["as_of_date"])
+			if goals, ok := result["goal_scores"].([]any); ok && len(goals) > 0 {
+				rows := make([]table.Row, 0, len(goals))
+				for _, raw := range goals {
+					g, _ := raw.(map[string]any)
+					rows = append(rows, table.Row{
+						describe(g["name"]),
+						fmt.Sprintf("%s / %s", number(g["earned_points"]), number(g["max_points"])),
+						fmt.Sprintf("%s / %s", number(g["completion_count"]), number(g["target_completions"])),
+						number(g["pace_percentage"]) + "%",
+					})
+				}
+				a.println()
+				a.println(renderTable([]table.Column{{Title: "Goal", Width: 24}, {Title: "Points", Width: 10}, {Title: "Done", Width: 8}, {Title: "Pace", Width: 7}}, rows))
+			}
+			var alerts []string
 			for _, key := range []string{"risk", "leverage", "streaks"} {
 				if text := describe(result[key]); text != "" {
+					alerts = append(alerts, text)
+				}
+			}
+			if len(alerts) > 0 {
+				a.println()
+				for _, text := range alerts {
 					a.println(text)
 				}
 			}

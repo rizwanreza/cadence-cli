@@ -511,7 +511,7 @@ func (a *App) runDoctor() []doctorCheck {
 				add("server", "ok", "no minimum CLI version", "")
 			case version.IsDev():
 				add("server", "warn", "server requires cadence ≥ "+min+"; this is a development build", "")
-			case update.Compare(version.Version, min) < 0:
+			case update.Compare(update.Core(version.Version), min) < 0:
 				add("server", "fail", fmt.Sprintf("server requires cadence ≥ %s; this is %s", min, version.Version), "Run `cadence update`.")
 			default:
 				add("server", "ok", "compatible (server requires ≥ "+min+")", "")

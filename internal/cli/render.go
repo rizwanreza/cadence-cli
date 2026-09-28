@@ -314,6 +314,14 @@ func describe(v any) string {
 	}
 }
 
+// number formats a JSON number without trailing zeros ("" for non-numbers).
+func number(v any) string {
+	if f, ok := v.(float64); ok {
+		return formatNumber(f)
+	}
+	return describe(v)
+}
+
 func deref(s *string) string {
 	if s == nil {
 		return ""

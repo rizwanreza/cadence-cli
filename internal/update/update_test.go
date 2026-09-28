@@ -68,3 +68,12 @@ func TestDisabledInCI(t *testing.T) {
 		t.Fatal("should be disabled in CI")
 	}
 }
+
+func TestCoreLetsReleaseCandidatesMeetTheirMinimum(t *testing.T) {
+	if Core("1.0.0-rc.1") != "1.0.0" || Core("v1.2.3+meta") != "1.2.3" || Core("dev") != "dev" {
+		t.Fatal(Core("1.0.0-rc.1"), Core("v1.2.3+meta"))
+	}
+	if Compare(Core("1.0.0-rc.1"), "1.0.0") != 0 {
+		t.Fatal("rc should satisfy its own minimum")
+	}
+}

@@ -131,6 +131,16 @@ func Compare(a, b string) int {
 	return semver.Compare(canonical(a), canonical(b))
 }
 
+// Core strips any prerelease/build suffix: 1.0.0-rc.1 → 1.0.0. A release
+// candidate of X satisfies a server minimum of X.
+func Core(v string) string {
+	c := canonical(v)
+	if c == "" {
+		return v
+	}
+	return strings.TrimPrefix(semver.Canonical(strings.SplitN(strings.SplitN(c, "-", 2)[0], "+", 2)[0]), "v")
+}
+
 // Valid reports whether v parses as semver (with or without "v").
 func Valid(v string) bool { return canonical(v) != "" }
 
