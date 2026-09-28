@@ -387,7 +387,7 @@ func newDoctorCmd(a *App) *cobra.Command {
   version  this binary vs the latest release
   path     the cadence on your PATH is this binary (catches stale copies)
   config   the saved login file and its permissions
-  auth     the host is reachable and the token is valid (GET /api/v1/me)
+  auth     the host is reachable and the token is valid (GET /identity.json)
   server   the server supports this CLI version (min_version)
   skill    the agent skill is installed and current
 
@@ -500,7 +500,7 @@ func (a *App) runDoctor() []doctorCheck {
 		case api.IsStatus(err, 401):
 			add("auth", "fail", fmt.Sprintf("%s rejected the token (from %s)", host, source), "Run `cadence login` with a new token from "+host+"/settings#cli.")
 		case api.IsStatus(err, 404):
-			add("auth", "fail", host+" doesn't serve /api/v1/me", "Is --url/CADENCE_URL pointing at a Cadence server?")
+			add("auth", "fail", host+" doesn't serve /identity.json", "Is --url/CADENCE_URL pointing at a Cadence server?")
 		case err != nil:
 			add("auth", "fail", err.Error(), "")
 		default:

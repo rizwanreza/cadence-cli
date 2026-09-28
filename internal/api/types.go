@@ -121,7 +121,7 @@ type User struct {
 	TimeZone string `json:"time_zone"`
 }
 
-// Me is GET /me: who the token belongs to and where they are in the loop.
+// Me is GET /identity.json: who the token belongs to and where they are in the loop.
 type Me struct {
 	User            User   `json:"user"`
 	Today           string `json:"today"`

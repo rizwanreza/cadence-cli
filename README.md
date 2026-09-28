@@ -260,8 +260,11 @@ Flags win over the environment, and the environment wins over saved config.
 For local development against a Cadence checkout:
 `cadence login --url http://localhost:3000`.
 
-Every request sends `User-Agent: cadence-cli/<version> (<os>/<arch>)` and uses
-the versioned API at `/api/v1`.
+Every request sends `User-Agent: cadence-cli/<version> (<os>/<arch>)` and
+`Accept: application/json`. There is no separate API namespace: the CLI talks
+to the same URLs as the web app, with `.json` appended (for example
+`GET /goals.json`, `GET /identity.json`). See https://cadenceweek.com/cli for
+more.
 
 ### Single-dash flags
 

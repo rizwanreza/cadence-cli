@@ -35,7 +35,7 @@ func TestExitCodesForAPIErrors(t *testing.T) {
 		{500, ExitError, "server_error"},
 	} {
 		f := newFake(t)
-		f.on("GET", "/api/v1/completions", tc.status, `{"error":{"code":"`+tc.errKey+`","message":"Nope","details":["Nope"]},"errors":["Nope"]}`)
+		f.on("GET", "/daily_logs/today.json", tc.status, `{"error":{"code":"`+tc.errKey+`","message":"Nope","details":["Nope"]},"errors":["Nope"]}`)
 		res := run(t, f, "today", "--json")
 		if res.code != tc.code {
 			t.Fatalf("status %d: exit %d, want %d", tc.status, res.code, tc.code)
@@ -102,9 +102,9 @@ func TestNotSignedInExitsThree(t *testing.T) {
 
 func TestEveryRequestSendsUserAgent(t *testing.T) {
 	testEnv(t)
-	f := newFake(t).on("GET", "/api/v1/completions", 200, `[]`)
+	f := newFake(t).on("GET", "/daily_logs/today.json", 200, `[]`)
 	run(t, f, "today")
-	ua := f.last("GET", "/api/v1/completions").Header.Get("User-Agent")
+	ua := f.last("GET", "/daily_logs/today.json").Header.Get("User-Agent")
 	if !strings.HasPrefix(ua, "cadence-cli/"+version.Version+" (") {
 		t.Fatalf("User-Agent = %q", ua)
 	}
@@ -186,14 +186,14 @@ func TestCompletionScripts(t *testing.T) {
 
 func statusFake(t *testing.T, me string) *fake {
 	f := newFake(t)
-	f.on("GET", "/api/v1/me", 200, me)
-	f.on("GET", "/api/v1/completions", 200, `[
+	f.on("GET", "/identity.json", 200, me)
+	f.on("GET", "/daily_logs/2026-09-28.json", 200, `[
 	  {"id":1,"slug":"workout","name":"Workout","goal_type":"boolean","input_kind":"checkbox","target_value":1,"date":"2026-09-28","completed":true,"value":1},
 	  {"id":2,"slug":"protein","name":"Protein","goal_type":"boolean","input_kind":"number","target_value":160,"unit":"g","date":"2026-09-28","completed":false,"value":null}]`)
-	f.handle("GET", "/api/v1/weekly_reviews/2026-09-28", func(w http.ResponseWriter, r *http.Request) {
+	f.handle("GET", "/weekly_reviews/2026-09-28.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"week_start":"2026-09-28","weekly_review":null,"previous_commitment":"Phone out of the bedroom"}`))
 	})
-	f.handle("GET", "/api/v1/weekly_reviews/2026-09-21", func(w http.ResponseWriter, r *http.Request) {
+	f.handle("GET", "/weekly_reviews/2026-09-21.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"week_start":"2026-09-21","weekly_review":null,"previous_commitment":null}`))
 	})
 	return f
@@ -269,7 +269,7 @@ func TestStatusFlagsForClosingLapsedAndFinalStretch(t *testing.T) {
 func TestStatusWithoutActiveCycle(t *testing.T) {
 	testEnv(t)
 	me := strings.Replace(meActive, meActive[strings.Index(meActive, `"active_cycle"`):strings.Index(meActive, `"closing_cycle"`)], `"active_cycle": null, `, 1)
-	f := newFake(t).on("GET", "/api/v1/me", 200, me)
+	f := newFake(t).on("GET", "/identity.json", 200, me)
 	res := run(t, f, "status", "--json")
 	report := decodeJSON(t, res.stdout)
 	if report["flags"].(map[string]any)["no_active_cycle"] != true || report["week"] != nil {
@@ -281,10 +281,10 @@ func TestStatusWithoutActiveCycle(t *testing.T) {
 
 func TestHistory(t *testing.T) {
 	testEnv(t)
-	f := newFake(t).on("GET", "/api/v1/entries", 200, `{"from":"2026-09-01","to":"2026-09-07","entries":[
+	f := newFake(t).on("GET", "/entries.json", 200, `{"from":"2026-09-01","to":"2026-09-07","entries":[
 	  {"goal_id":2,"goal_key":"protein","goal_slug":"protein","goal_name":"Protein","date":"2026-09-01","value":"120.0","completed":false,"unit":"g"}]}`)
 	res := run(t, f, "history", "--from", "2026-09-01", "--to", "2026-09-07", "--goal", "protein", "--json")
-	req := f.last("GET", "/api/v1/entries")
+	req := f.last("GET", "/entries.json")
 	if req.Query != "from=2026-09-01&goal=protein&to=2026-09-07" {
 		t.Fatalf("query = %s", req.Query)
 	}
@@ -300,8 +300,8 @@ func TestHistory(t *testing.T) {
 func TestWeekReviewShowAndSet(t *testing.T) {
 	testEnv(t)
 	f := newFake(t)
-	f.on("GET", "/api/v1/weekly_reviews/current", 200, `{"week_start":"2026-09-28","weekly_review":{"biggest_win":"Shipped","derail_root_cause":null,"one_change_next_week":null,"next_week_constraint":null},"previous_commitment":"Plan Sundays"}`)
-	f.on("PUT", "/api/v1/weekly_reviews/2026-09-21", 200, `{"week_start":"2026-09-21","weekly_review":{"biggest_win":"Four blocks","derail_root_cause":"Late nights","one_change_next_week":"Phone out","next_week_constraint":null},"previous_commitment":null}`)
+	f.on("GET", "/weekly_reviews/current.json", 200, `{"week_start":"2026-09-28","weekly_review":{"biggest_win":"Shipped","derail_root_cause":null,"one_change_next_week":null,"next_week_constraint":null},"previous_commitment":"Plan Sundays"}`)
+	f.on("PUT", "/weekly_reviews/2026-09-21.json", 200, `{"week_start":"2026-09-21","weekly_review":{"biggest_win":"Four blocks","derail_root_cause":"Late nights","one_change_next_week":"Phone out","next_week_constraint":null},"previous_commitment":null}`)
 
 	res := run(t, f, "week", "review", "show")
 	mustContain(t, res.stdout, "week of 2026-09-28", "Last week's commitment: Plan Sundays", "Biggest win: Shipped")
@@ -311,7 +311,7 @@ func TestWeekReviewShowAndSet(t *testing.T) {
 		t.Fatal(res.stderr)
 	}
 	var body map[string]map[string]string
-	_ = json.Unmarshal([]byte(f.last("PUT", "/api/v1/weekly_reviews/2026-09-21").Body), &body)
+	_ = json.Unmarshal([]byte(f.last("PUT", "/weekly_reviews/2026-09-21.json").Body), &body)
 	want := map[string]string{"biggest_win": "Four blocks", "derail_root_cause": "Late nights", "one_change_next_week": "Phone out"}
 	if !reflect.DeepEqual(body["weekly_review"], want) {
 		t.Fatalf("PUT body = %v (only changed fields must be sent)", body)
@@ -326,15 +326,15 @@ func TestWeekReviewShowAndSet(t *testing.T) {
 func TestCycleReviewSetDefaultsToClosingCycleAndDismiss(t *testing.T) {
 	testEnv(t)
 	me := strings.Replace(meActive, `"closing_cycle": null`, `"closing_cycle": {"id": 41, "status": "ended", "awaiting_review": true}`, 1)
-	f := newFake(t).on("GET", "/api/v1/me", 200, me)
-	f.on("PATCH", "/api/v1/twelve_week_years/41/review", 200, `{"id":41}`)
-	f.on("POST", "/api/v1/twelve_week_years/41/review_dismissal", 200, `{"id":41,"review_dismissed":true}`)
+	f := newFake(t).on("GET", "/identity.json", 200, me)
+	f.on("PATCH", "/twelve_week_years/41/review.json", 200, `{"id":41}`)
+	f.on("POST", "/twelve_week_years/41/review_dismissal.json", 200, `{"id":41,"review_dismissed":true}`)
 	res := run(t, f, "cycles", "review", "set", "--what-drove-results", "Mornings", "-closing_notes", "Rest more")
 	if res.code != 0 {
 		t.Fatal(res.stderr)
 	}
 	var body map[string]map[string]string
-	_ = json.Unmarshal([]byte(f.last("PATCH", "/api/v1/twelve_week_years/41/review").Body), &body)
+	_ = json.Unmarshal([]byte(f.last("PATCH", "/twelve_week_years/41/review.json").Body), &body)
 	if !reflect.DeepEqual(body["review"], map[string]string{"what_drove_results": "Mornings", "closing_notes": "Rest more"}) {
 		t.Fatalf("PATCH body = %v", body)
 	}
@@ -346,8 +346,8 @@ func TestCycleReviewSetDefaultsToClosingCycleAndDismiss(t *testing.T) {
 func TestCyclesNextResolvesSlugsAndStartKey(t *testing.T) {
 	testEnv(t)
 	f := newFake(t)
-	f.on("GET", "/api/v1/goals", 200, `[{"id":7,"slug":"reading","name":"Reading"},{"id":8,"slug":"protein","name":"Protein"}]`)
-	f.on("POST", "/api/v1/twelve_week_years/42/next_cycle", 201, `{"twelve_week_year":{"id":43,"name":"Winter 2026","status":"draft","start_date":"2026-12-14","end_date":"2027-03-07"},
+	f.on("GET", "/goals.json", 200, `[{"id":7,"slug":"reading","name":"Reading"},{"id":8,"slug":"protein","name":"Protein"}]`)
+	f.on("POST", "/twelve_week_years/42/next_cycle.json", 201, `{"twelve_week_year":{"id":43,"name":"Winter 2026","status":"draft","start_date":"2026-12-14","end_date":"2027-03-07"},
 	  "goals":[{"id":90,"name":"Reading","target_value":20,"unit":"min","weekly_cap":4}],
 	  "carry_forward":{"copied":["Reading"],"invalid":[{"name":"Protein","errors":["Target is too big"]}]}}`)
 	res := run(t, f, "cycles", "next", "--id", "42", "--start", "after-13th", "--goals", "reading,8")
@@ -355,7 +355,7 @@ func TestCyclesNextResolvesSlugsAndStartKey(t *testing.T) {
 		t.Fatal(res.stderr)
 	}
 	var body map[string]any
-	_ = json.Unmarshal([]byte(f.last("POST", "/api/v1/twelve_week_years/42/next_cycle").Body), &body)
+	_ = json.Unmarshal([]byte(f.last("POST", "/twelve_week_years/42/next_cycle.json").Body), &body)
 	if body["start"] != "after_13th" || !reflect.DeepEqual(body["goal_ids"], []any{float64(7), float64(8)}) {
 		t.Fatalf("body = %v", body)
 	}
@@ -364,12 +364,12 @@ func TestCyclesNextResolvesSlugsAndStartKey(t *testing.T) {
 
 func TestUnscheduleFreshStartAndNotes(t *testing.T) {
 	testEnv(t)
-	f := newFake(t).on("GET", "/api/v1/me", 200, meActive)
-	f.on("DELETE", "/api/v1/twelve_week_years/43/activation", 200, `{"id":43,"status":"draft"}`)
-	f.on("POST", "/api/v1/fresh_start", 201, `{"twelve_week_year":{"id":50,"name":"Fresh","status":"draft","start_date":"2026-09-28"},"goals":[]}`)
-	f.on("POST", "/api/v1/fresh_start_dismissal", 204, ``)
-	f.on("PATCH", "/api/v1/twelve_week_years/42", 200, `{"id":42,"notes":"Travel weeks 5-6"}`)
-	f.on("GET", "/api/v1/goals", 200, `[{"id":7,"slug":"reading","name":"Reading"}]`)
+	f := newFake(t).on("GET", "/identity.json", 200, meActive)
+	f.on("DELETE", "/twelve_week_years/43/activation.json", 200, `{"id":43,"status":"draft"}`)
+	f.on("POST", "/fresh_start.json", 201, `{"twelve_week_year":{"id":50,"name":"Fresh","status":"draft","start_date":"2026-09-28"},"goals":[]}`)
+	f.on("POST", "/fresh_start_dismissal.json", 204, ``)
+	f.on("PATCH", "/twelve_week_years/42.json", 200, `{"id":42,"notes":"Travel weeks 5-6"}`)
+	f.on("GET", "/goals.json", 200, `[{"id":7,"slug":"reading","name":"Reading"}]`)
 
 	if res := run(t, f, "cycles", "unschedule", "--id", "43", "--json"); res.code != 0 || decodeJSON(t, res.stdout)["status"] != "draft" {
 		t.Fatalf("unschedule: %+v", res)
@@ -378,7 +378,7 @@ func TestUnscheduleFreshStartAndNotes(t *testing.T) {
 	if res.code != 0 || decodeJSON(t, res.stdout)["twelve_week_year"].(map[string]any)["id"] != float64(50) {
 		t.Fatalf("fresh-start: %+v", res)
 	}
-	if body := f.last("POST", "/api/v1/fresh_start").Body; body != `{"goal_ids":[7]}` {
+	if body := f.last("POST", "/fresh_start.json").Body; body != `{"goal_ids":[7]}` {
 		t.Fatalf("fresh-start body = %s", body)
 	}
 	if res := run(t, f, "cycles", "fresh-start", "dismiss", "--json"); res.code != 0 || decodeJSON(t, res.stdout)["dismissed"] != true {
@@ -388,14 +388,14 @@ func TestUnscheduleFreshStartAndNotes(t *testing.T) {
 	if res.code != 0 || decodeJSON(t, res.stdout)["notes"] != "Travel weeks 5-6" {
 		t.Fatalf("notes: %+v", res)
 	}
-	if body := f.last("PATCH", "/api/v1/twelve_week_years/42").Body; body != `{"twelve_week_year":{"notes":"Travel weeks 5-6"}}` {
+	if body := f.last("PATCH", "/twelve_week_years/42.json").Body; body != `{"twelve_week_year":{"notes":"Travel weeks 5-6"}}` {
 		t.Fatalf("notes body = %s", body)
 	}
 }
 
 func TestFreshStartBlockedIsAConflict(t *testing.T) {
 	testEnv(t)
-	f := newFake(t).on("POST", "/api/v1/fresh_start", 422, `{"error":{"code":"validation_failed","message":"Fall 2026 started today. There's nothing to start over yet.","details":[]},"errors":[]}`)
+	f := newFake(t).on("POST", "/fresh_start.json", 422, `{"error":{"code":"validation_failed","message":"Fall 2026 started today. There's nothing to start over yet.","details":[]},"errors":[]}`)
 	res := run(t, f, "cycles", "fresh-start")
 	if res.code != ExitConflict || !strings.Contains(res.stderr, "nothing to start over") {
 		t.Fatalf("%+v", res)
@@ -405,8 +405,8 @@ func TestFreshStartBlockedIsAConflict(t *testing.T) {
 func TestGoalsArchive(t *testing.T) {
 	testEnv(t)
 	f := newFake(t)
-	f.on("GET", "/api/v1/goals", 200, `[{"id":7,"slug":"cold-shower","name":"Cold shower"}]`)
-	f.on("DELETE", "/api/v1/goals/7", 204, ``)
+	f.on("GET", "/goals.json", 200, `[{"id":7,"slug":"cold-shower","name":"Cold shower"}]`)
+	f.on("POST", "/goals/7/archive.json", 204, ``)
 	res := run(t, f, "goals", "archive", "--goal", "Cold shower", "--json")
 	if res.code != 0 || decodeJSON(t, res.stdout)["goal_id"] != float64(7) {
 		t.Fatalf("%+v", res)
@@ -418,17 +418,17 @@ func TestGoalsArchive(t *testing.T) {
 
 func TestInsightAndScoreSignals(t *testing.T) {
 	testEnv(t)
-	f := newFake(t).on("GET", "/api/v1/me", 200, meActive)
-	f.on("GET", "/api/v1/progress_insight", 200, `{"week_start":"2026-09-28","source":"llm","stale":true,"generated_at":"2026-09-28T07:00:00Z",
+	f := newFake(t).on("GET", "/identity.json", 200, meActive)
+	f.on("GET", "/progress_insight.json", 200, `{"week_start":"2026-09-28","source":"llm","stale":true,"generated_at":"2026-09-28T07:00:00Z",
 	  "assessment":"Solid start.","guidance":"Protect mornings.","risk":"Protein slipped twice.","leverage":"Prep lunches."}`)
-	f.on("GET", "/api/v1/twelve_week_years/42/scorecard", 200, `{"execution_percentage":40,"total_points":4,"max_possible_points":10,"pace_percentage":90,"rating":"On Track",
+	f.on("GET", "/twelve_week_years/42/scorecard.json", 200, `{"execution_percentage":40,"total_points":4,"max_possible_points":10,"pace_percentage":90,"rating":"On Track",
 	  "period_start_date":"2026-09-28","period_end_date":"2026-10-04","as_of_date":"2026-09-28",
 	  "risk":{"message":"Risk: Protein — avoid a second miss today.","goals":[{"goal_id":2,"goal_name":"Protein"}]},
 	  "leverage":{"message":"Most leverage: complete Reading today to get back on pace.","goal":{"goal_id":7,"goal_name":"Reading","pace_percentage":33.3}},
 	  "streaks":null}`)
 	res := run(t, f, "insight", "--week", "2026-09-28")
 	mustContain(t, res.stdout, "Assessment: Solid start.", "Leverage: Prep lunches.", "refreshing")
-	if q := f.last("GET", "/api/v1/progress_insight").Query; q != "week_start=2026-09-28" {
+	if q := f.last("GET", "/progress_insight.json").Query; q != "week_start=2026-09-28" {
 		t.Fatalf("query = %s", q)
 	}
 	res = run(t, f, "score")
@@ -441,7 +441,7 @@ func TestLoginValidatesBeforeSaving(t *testing.T) {
 	testEnv(t)
 	t.Setenv("CADENCE_TEST_NO_TOKEN", "1")
 	f := newFake(t)
-	f.handle("GET", "/api/v1/me", func(w http.ResponseWriter, r *http.Request) {
+	f.handle("GET", "/identity.json", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer cad_good" {
 			w.WriteHeader(401)
 			_, _ = w.Write([]byte(`{"error":{"code":"unauthorized","message":"Unauthorized","details":[]},"errors":["Unauthorized"]}`))
@@ -482,7 +482,7 @@ func TestLoginValidatesBeforeSaving(t *testing.T) {
 
 func TestLoginInteractiveOffersBrowserAndHidesInput(t *testing.T) {
 	testEnv(t)
-	f := newFake(t).on("GET", "/api/v1/me", 200, meActive)
+	f := newFake(t).on("GET", "/identity.json", 200, meActive)
 	t.Setenv("CADENCE_URL", f.srv.URL)
 	t.Setenv("CADENCE_TEST_NO_TOKEN", "1")
 	app, out, errOut := newTestApp(f, "y\n")
@@ -502,7 +502,7 @@ func TestLoginInteractiveOffersBrowserAndHidesInput(t *testing.T) {
 
 func TestLogoutRevoke(t *testing.T) {
 	testEnv(t)
-	f := newFake(t).on("DELETE", "/api/v1/token", 204, ``)
+	f := newFake(t).on("DELETE", "/settings/cli_token.json", 204, ``)
 	if err := config.Save(config.Config{Host: f.srv.URL, Token: "cad_saved", Email: "demo@example.com"}); err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +511,7 @@ func TestLogoutRevoke(t *testing.T) {
 	if res.code != 0 || decodeJSON(t, res.stdout)["revoked"] != true {
 		t.Fatalf("%+v", res)
 	}
-	if got := f.last("DELETE", "/api/v1/token").Header.Get("Authorization"); got != "Bearer cad_saved" {
+	if got := f.last("DELETE", "/settings/cli_token.json").Header.Get("Authorization"); got != "Bearer cad_saved" {
 		t.Fatalf("revoked with %q", got)
 	}
 	if cfg, _ := config.Load(); cfg.Token != "" || cfg.Host != f.srv.URL {
@@ -589,7 +589,7 @@ func TestManagedSkillRefreshesAfterUpgrade(t *testing.T) {
 	_ = os.MkdirAll(unmanaged, 0o755)
 	_ = os.WriteFile(filepath.Join(unmanaged, "SKILL.md"), []byte("hand written"), 0o644)
 
-	f := newFake(t).on("GET", "/api/v1/completions", 200, `[]`)
+	f := newFake(t).on("GET", "/daily_logs/today.json", 200, `[]`)
 	if res := run(t, f, "today"); res.code != 0 {
 		t.Fatal(res.stderr)
 	}
@@ -618,7 +618,7 @@ func TestEmbeddedSkillFrontmatter(t *testing.T) {
 
 func TestDoctorJSON(t *testing.T) {
 	testEnv(t)
-	f := newFake(t).on("GET", "/api/v1/me", 200, meActive)
+	f := newFake(t).on("GET", "/identity.json", 200, meActive)
 	f.on("GET", "/releases/latest", 200, `{"tag_name":"v9.9.9"}`)
 	res := run(t, f, "doctor", "--json")
 	report := decodeJSON(t, res.stdout)
@@ -635,7 +635,7 @@ func TestDoctorJSON(t *testing.T) {
 	}
 
 	t.Setenv("CADENCE_TOKEN", "cad_bad")
-	f.on("GET", "/api/v1/me", 401, `{"error":{"code":"unauthorized","message":"Unauthorized","details":[]}}`)
+	f.on("GET", "/identity.json", 401, `{"error":{"code":"unauthorized","message":"Unauthorized","details":[]}}`)
 	res = run(t, f, "doctor")
 	if res.code != ExitError || !strings.Contains(res.stdout, "✗ auth") || res.stderr != "" {
 		t.Fatalf("failing doctor: %+v", res)
@@ -647,7 +647,7 @@ func TestDoctorFailsWhenServerNeedsNewerCLI(t *testing.T) {
 	old := version.Version
 	t.Cleanup(func() { version.Version = old })
 	version.Version = "1.0.0"
-	f := newFake(t).on("GET", "/api/v1/me", 200, strings.Replace(meActive, `"min_version": "1.0.0"`, `"min_version": "1.2.0"`, 1))
+	f := newFake(t).on("GET", "/identity.json", 200, strings.Replace(meActive, `"min_version": "1.0.0"`, `"min_version": "1.2.0"`, 1))
 	f.on("GET", "/releases/latest", 200, `{"tag_name":"v1.2.0"}`)
 	res := run(t, f, "doctor", "--json")
 	if res.code != ExitError || !strings.Contains(res.stdout, "requires cadence ≥ 1.2.0") {
@@ -696,7 +696,7 @@ func TestUpdateNoticeOnlyOnTTYWithoutJSONOrCI(t *testing.T) {
 	old := version.Version
 	t.Cleanup(func() { version.Version = old })
 	version.Version = "1.0.0"
-	f := newFake(t).on("GET", "/api/v1/completions", 200, `[]`)
+	f := newFake(t).on("GET", "/daily_logs/today.json", 200, `[]`)
 	f.on("GET", "/releases/latest", 200, `{"tag_name":"v1.1.0"}`)
 	t.Setenv("CADENCE_URL", f.srv.URL)
 	t.Setenv("CADENCE_TOKEN", "test-token")
@@ -741,21 +741,21 @@ func TestUpdateNoticeOnlyOnTTYWithoutJSONOrCI(t *testing.T) {
 func TestCyclesNextBlankDefaultStartAndConflicts(t *testing.T) {
 	testEnv(t)
 	f := newFake(t)
-	f.on("POST", "/api/v1/twelve_week_years/42/next_cycle", 200, `{"twelve_week_year":{"id":43,"name":"Winter","status":"draft"},"goals":[],"carry_forward":null}`)
+	f.on("POST", "/twelve_week_years/42/next_cycle.json", 200, `{"twelve_week_year":{"id":43,"name":"Winter","status":"draft"},"goals":[],"carry_forward":null}`)
 	res := run(t, f, "cycles", "next", "--id", "42", "--blank")
 	if res.code != 0 {
 		t.Fatal(res.stderr)
 	}
-	if body := f.last("POST", "/api/v1/twelve_week_years/42/next_cycle").Body; body != `{"goal_ids":[]}` {
+	if body := f.last("POST", "/twelve_week_years/42/next_cycle.json").Body; body != `{"goal_ids":[]}` {
 		t.Fatalf("body = %s (no start: the server picks the first option)", body)
 	}
 	mustContain(t, res.stdout, "already exists")
 
-	f.on("POST", "/api/v1/twelve_week_years/42/next_cycle", 409, `{"error":{"code":"conflict","message":"The next cycle is already scheduled.","details":[]},"errors":[]}`)
+	f.on("POST", "/twelve_week_years/42/next_cycle.json", 409, `{"error":{"code":"conflict","message":"The next cycle is already scheduled.","details":[]},"errors":[]}`)
 	if res := run(t, f, "cycles", "next", "--id", "42"); res.code != ExitConflict || !strings.Contains(res.stderr, "already scheduled") {
 		t.Fatalf("%+v", res)
 	}
-	f.on("POST", "/api/v1/twelve_week_years/42/next_cycle", 422, `{"error":{"code":"validation_failed","message":"start must be one of: today, after_13th.","details":["start must be one of: today, after_13th."]},"errors":["start must be one of: today, after_13th."]}`)
+	f.on("POST", "/twelve_week_years/42/next_cycle.json", 422, `{"error":{"code":"validation_failed","message":"start must be one of: today, after_13th.","details":["start must be one of: today, after_13th."]},"errors":["start must be one of: today, after_13th."]}`)
 	if res := run(t, f, "cycles", "next", "--id", "42", "--start", "after"); res.code != ExitConflict || !strings.Contains(res.stderr, "start must be one of: today, after_13th.") {
 		t.Fatalf("%+v", res)
 	}
@@ -764,8 +764,8 @@ func TestCyclesNextBlankDefaultStartAndConflicts(t *testing.T) {
 func TestAddReportsIdempotentReplay(t *testing.T) {
 	testEnv(t)
 	f := newFake(t)
-	f.on("GET", "/api/v1/goals", 200, `[{"id":26,"slug":"protein","name":"Protein","input_kind":"number","target_value":160,"unit":"g"}]`)
-	f.handle("POST", "/api/v1/goals/26/entries/today/increments", func(w http.ResponseWriter, r *http.Request) {
+	f.on("GET", "/goals.json", 200, `[{"id":26,"slug":"protein","name":"Protein","input_kind":"number","target_value":160,"unit":"g"}]`)
+	f.handle("POST", "/goals/26/entries/today/increments.json", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Idempotency-Key") != "meal-1" {
 			t.Fatalf("key = %q", r.Header.Get("Idempotency-Key"))
 		}

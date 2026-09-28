@@ -247,7 +247,7 @@ Single-dash spellings (`-goal`, `-json`) also work.
 ## Troubleshooting
 
 - Run `cadence doctor` (or `--json`). It checks the binary version, the PATH,
-  the saved login, the server (`/api/v1/me` and the minimum CLI version) and
+  the saved login, the server (`/identity.json` and the minimum CLI version) and
   this skill.
 - Exit 3: the token is missing or revoked. The user runs `cadence login` with a
   token from Settings → CLI Access. Never ask the user to paste a token into

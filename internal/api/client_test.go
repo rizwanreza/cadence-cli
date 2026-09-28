@@ -19,7 +19,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 
 func TestFetchTwelveWeekYears(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/twelve_week_years" {
+		if r.URL.Path != "/twelve_week_years.json" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		_, _ = w.Write([]byte(`[{"id":7,"start_date":"2025-12-29","end_date":"2026-03-22","review_starts_on":"2026-03-16",
@@ -41,7 +41,7 @@ func TestFetchTwelveWeekYears(t *testing.T) {
 
 func TestFetchReview(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/twelve_week_years/7/review" {
+		if r.URL.Path != "/twelve_week_years/7/review.json" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		_, _ = w.Write([]byte(`{
@@ -82,11 +82,8 @@ func TestFetchReview(t *testing.T) {
 
 func TestFetchCompletionsParsesNumericValueAndUnit(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/completions" {
+		if r.URL.Path != "/daily_logs/2026-07-04.json" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-		if got := r.URL.Query().Get("date"); got != "2026-07-04" {
-			t.Fatalf("expected date query 2026-07-04, got %q", got)
 		}
 		_, _ = w.Write([]byte(`[{"id":26,"slug":"protein","name":"Protein","goal_type":"boolean","frequency":"daily","target_value":160,"unit":"g","date":"2026-07-04","completed":false,"value":105.0}]`))
 	})
@@ -126,8 +123,11 @@ func TestNewRequestSetsHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if req.URL.String() != "https://example.com/api/v1/goals" {
-		t.Fatalf("expected /api/v1 prefix, got %s", req.URL)
+	if req.URL.String() != "https://example.com/goals.json" {
+		t.Fatalf("expected .json suffix, got %s", req.URL)
+	}
+	if got := req.Header.Get("Accept"); got != "application/json" {
+		t.Fatalf("expected Accept json, got %q", got)
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer secret-token" {
 		t.Fatalf("expected bearer header, got %q", got)
@@ -250,5 +250,19 @@ func TestAddRetriesOnceWithTheSameKeyAfterAConnectionDrop(t *testing.T) {
 	}
 	if len(keys) != 2 || keys[0] != "same-key" || keys[1] != "same-key" {
 		t.Fatalf("keys = %v", keys)
+	}
+}
+
+func TestJSONPath(t *testing.T) {
+	for in, want := range map[string]string{
+		"/goals":                    "/goals.json",
+		"/goals?cycle_id=4&date=x":  "/goals.json?cycle_id=4&date=x",
+		"/daily_logs/2026-09-28":    "/daily_logs/2026-09-28.json",
+		"/identity.json":            "/identity.json",
+		"/goals/7/archive?cycle_id": "/goals/7/archive.json?cycle_id",
+	} {
+		if got := JSONPath(in); got != want {
+			t.Errorf("JSONPath(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

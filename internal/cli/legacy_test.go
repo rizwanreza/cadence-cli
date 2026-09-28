@@ -21,12 +21,12 @@ func TestAddSendsDeltaWithoutReadingProgress(t *testing.T) {
 			t.Fatal("missing authentication")
 		}
 		if r.Method == http.MethodGet {
-			if r.URL.Path != "/api/v1/goals" {
+			if r.URL.Path != "/goals.json" {
 				t.Fatalf("unexpected progress read: %s", r.URL)
 			}
 			return `[{"id":26,"slug":"protein","name":"Protein","goal_type":"boolean","input_kind":"number","target_value":160,"unit":"g"}]`
 		}
-		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/goals/26/entries/today/increments" {
+		if r.Method != http.MethodPost || r.URL.Path != "/goals/26/entries/today/increments.json" {
 			t.Fatalf("wrong increment request: %s %s", r.Method, r.URL)
 		}
 		var body map[string]map[string]string
@@ -80,7 +80,7 @@ func TestCompleteStillSupportsCheckboxes(t *testing.T) {
 		if r.Method == http.MethodGet {
 			return `[{"id":1,"slug":"workout","name":"Workout","input_kind":"checkbox","goal_type":"boolean","target_value":1}]`
 		}
-		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/goals/1/entries" {
+		if r.Method != http.MethodPost || r.URL.Path != "/goals/1/entries.json" {
 			t.Fatalf("wrong checkbox request: %s %s", r.Method, r.URL)
 		}
 		return `{"goal_id":1,"date":"2026-06-24","value":1,"completed":true}`
@@ -129,14 +129,14 @@ func TestNumericCommandsRejectCheckboxes(t *testing.T) {
 func TestMissingServerResourcesNeverFallBack(t *testing.T) {
 	testEnv(t)
 	f := newFake(t)
-	f.on("GET", "/api/v1/goals", 200, `[{"id":26,"slug":"protein","name":"Protein","input_kind":"number","target_value":160}]`)
-	f.on("POST", "/api/v1/goals/26/entries/2026-06-24/increments", 404, `{"error":"Not found"}`)
+	f.on("GET", "/goals.json", 200, `[{"id":26,"slug":"protein","name":"Protein","input_kind":"number","target_value":160}]`)
+	f.on("POST", "/goals/26/entries/2026-06-24/increments.json", 404, `{"error":"Not found"}`)
 	res := run(t, f, "add", "-goal", "protein", "-date", "2026-06-24", "-value", "40")
 	if res.code != ExitNotFound {
 		t.Fatalf("expected exit 4, got %d (%s)", res.code, res.stderr)
 	}
 	for _, c := range f.calls() {
-		if c.Path == "/api/v1/goals/26/entries" {
+		if c.Path == "/goals/26/entries.json" {
 			t.Fatal("fell back to the legacy entries API")
 		}
 	}
@@ -213,7 +213,7 @@ func TestSetUsesHistoricalCycleAndJSONNumericResult(t *testing.T) {
 			}
 			return `[{"id":17,"slug":"reading","name":"Reading","goal_type":"boolean","input_kind":"number","scoring_mode":"threshold","target_value":20,"unit":"min"}]`
 		}
-		if r.URL.Path != "/api/v1/goals/17/entries/2026-09-10" || r.Method != http.MethodPut {
+		if r.URL.Path != "/goals/17/entries/2026-09-10.json" || r.Method != http.MethodPut {
 			t.Fatalf("wrong historical goal: %s", r.URL.Path)
 		}
 		return `{"id":8,"goal_id":17,"date":"2026-09-10","value":15,"points":0,"completed":false}`
@@ -233,7 +233,7 @@ func TestPlanPreviewUsesCreateWithoutActivation(t *testing.T) {
 	requests := 0
 	f := serve(t, func(r *http.Request) string {
 		requests++
-		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/twelve_week_years" {
+		if r.Method != http.MethodPost || r.URL.Path != "/twelve_week_years.json" {
 			t.Fatalf("unexpected preview request: %s %s", r.Method, r.URL)
 		}
 		var payload map[string]any
@@ -258,7 +258,7 @@ func TestPlanPreviewUsesCreateWithoutActivation(t *testing.T) {
 func TestGoalReorderUsesRESTResource(t *testing.T) {
 	testEnv(t)
 	f := serve(t, func(r *http.Request) string {
-		if r.Method != http.MethodPatch || r.URL.Path != "/api/v1/twelve_week_years/3/goal_order" {
+		if r.Method != http.MethodPatch || r.URL.Path != "/twelve_week_years/3/goal_order.json" {
 			t.Fatalf("unexpected order resource: %s %s", r.Method, r.URL)
 		}
 		var body struct {
@@ -280,7 +280,7 @@ func TestGoalReorderUsesRESTResource(t *testing.T) {
 func TestScoreRendersServerSnapshotWithoutRecalculation(t *testing.T) {
 	testEnv(t)
 	f := serve(t, func(r *http.Request) string {
-		if r.URL.Path != "/api/v1/twelve_week_years/3/scorecard" || r.URL.Query().Get("as_of_date") != "2026-09-19" {
+		if r.URL.Path != "/twelve_week_years/3/scorecard.json" || r.URL.Query().Get("as_of_date") != "2026-09-19" {
 			t.Fatalf("unexpected score request: %s", r.URL)
 		}
 		return `{"execution_percentage":57.1,"total_points":4,"max_possible_points":7,"pace_percentage":80,"rating":"Strong","period_start_date":"2026-09-14","period_end_date":"2026-09-20","as_of_date":"2026-09-19"}`

@@ -1,4 +1,5 @@
-// Package api is a small client for the Cadence JSON API (/api/v1).
+// Package api is a small client for the Cadence JSON API: the web app's own
+// resource URLs, requested with a .json suffix.
 package api
 
 import (
@@ -15,8 +16,17 @@ import (
 	"time"
 )
 
-// Prefix is prepended to every endpoint path.
-const Prefix = "/api/v1"
+// JSONPath turns a resource path (optionally with a query string) into the URL
+// path the server answers with JSON: "/goals?x=1" becomes "/goals.json?x=1".
+// It is the one place the .json suffix is added.
+func JSONPath(path string) string {
+	resource, query, hasQuery := strings.Cut(path, "?")
+	resource = strings.TrimSuffix(resource, ".json") + ".json"
+	if hasQuery {
+		return resource + "?" + query
+	}
+	return resource
+}
 
 // Client carries the resolved base URL, token and HTTP client.
 type Client struct {
@@ -220,12 +230,13 @@ func codeForStatus(status int) string {
 	return "error"
 }
 
-// NewRequest builds a request against Prefix+path with auth and identity headers.
+// NewRequest builds a request for the resource path (see JSONPath) with auth,
+// identity and Accept: application/json headers.
 func (c *Client) NewRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+Prefix+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+JSONPath(path), body)
 	if err != nil {
 		return nil, err
 	}

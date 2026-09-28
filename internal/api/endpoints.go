@@ -9,22 +9,25 @@ import (
 	"strconv"
 )
 
-// Me calls GET /me.
+// Me calls GET /identity.json.
 func (c *Client) Me(ctx context.Context) (Me, error) {
 	var me Me
-	err := c.RequestJSON(ctx, http.MethodGet, "/me", nil, &me)
+	err := c.RequestJSON(ctx, http.MethodGet, "/identity", nil, &me)
 	return me, err
 }
 
-// RevokeToken calls DELETE /token (revokes the token used for the request).
+// RevokeToken calls DELETE /settings/cli_token.json (revokes the token used for the request).
 func (c *Client) RevokeToken(ctx context.Context) error {
-	return c.RequestJSON(ctx, http.MethodDelete, "/token", nil, nil)
+	return c.RequestJSON(ctx, http.MethodDelete, "/settings/cli_token", nil, nil)
 }
 
-// Completions calls GET /completions?date= (empty date = today in the user's zone).
+// Completions calls GET /daily_logs/:date.json (empty date = today in the user's zone).
 func (c *Client) Completions(ctx context.Context, date string) ([]GoalStatus, error) {
 	var statuses []GoalStatus
-	err := c.RequestJSON(ctx, http.MethodGet, "/completions?date="+url.QueryEscape(date), nil, &statuses)
+	if date == "" {
+		date = "today"
+	}
+	err := c.RequestJSON(ctx, http.MethodGet, "/daily_logs/"+url.PathEscape(date), nil, &statuses)
 	return statuses, err
 }
 
@@ -46,13 +49,13 @@ func (c *Client) Goals(ctx context.Context, date string, cycleID int) ([]Goal, e
 	return goals, err
 }
 
-// ArchiveGoal calls DELETE /goals/:id.
+// ArchiveGoal calls POST /goals/:id/archive.json.
 func (c *Client) ArchiveGoal(ctx context.Context, goalID, cycleID int) error {
-	path := fmt.Sprintf("/goals/%d", goalID)
+	path := fmt.Sprintf("/goals/%d/archive", goalID)
 	if cycleID > 0 {
 		path += fmt.Sprintf("?cycle_id=%d", cycleID)
 	}
-	return c.RequestJSON(ctx, http.MethodDelete, path, nil, nil)
+	return c.RequestJSON(ctx, http.MethodPost, path, nil, nil)
 }
 
 // Cycles calls GET /twelve_week_years.
