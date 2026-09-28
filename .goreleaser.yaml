@@ -78,6 +78,8 @@ homebrew_casks:
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Casks
+    # Release candidates don't touch the tap (and don't need HOMEBREW_TAP_TOKEN).
+    skip_upload: auto
     homepage: https://cadenceweek.com/cli
     description: Run your 12-Week Year from the terminal, or let your agent do it
     binaries:
