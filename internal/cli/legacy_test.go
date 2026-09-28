@@ -315,6 +315,9 @@ func TestNewTodayItemEmitsNumericValue(t *testing.T) {
 	payload, _ := json.Marshal(item)
 	out := string(payload)
 	mustContain(t, out, `"kind":"numeric"`, `"value":105`, `"unit":"g"`, `"target_value":160`, `"completed":false`)
+	if strings.Contains(out, "goal_type") {
+		t.Fatalf("internal goal_type leaked into output: %s", out)
+	}
 	if strings.Contains(out, `"value":"105`) {
 		t.Fatalf("value was emitted as a string, want a number: %s", out)
 	}

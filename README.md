@@ -206,7 +206,7 @@ illustrative plan.
 Add `--json` to any command for machine-readable output on stdout. Examples:
 
 - `today --json`: an array with one object per goal: `id`, `slug`, `name`,
-  `goal_type`, `kind` (`pass_fail` | `numeric` | `count`), `input_kind`,
+  `kind` (`pass_fail` | `numeric` | `count`), `input_kind`,
   `scoring_mode`, `target_value`, `date`, `completed`, `value` (a number, or
   `null` if nothing is logged) and `unit`.
 - `status --json`: `today`, `weekday`, `user`, `active_cycle`, `closing_cycle`,

@@ -24,7 +24,6 @@ type todayItem struct {
 	ID          int      `json:"id"`
 	Slug        string   `json:"slug"`
 	Name        string   `json:"name"`
-	GoalType    string   `json:"goal_type"`
 	Kind        string   `json:"kind"`
 	InputKind   string   `json:"input_kind"`
 	ScoringMode string   `json:"scoring_mode"`
@@ -38,7 +37,7 @@ type todayItem struct {
 
 func newTodayItem(s api.GoalStatus) todayItem {
 	item := todayItem{
-		ID: s.ID, Slug: s.Slug, Name: s.Name, GoalType: s.GoalType, Kind: s.Kind(),
+		ID: s.ID, Slug: s.Slug, Name: s.Name, Kind: s.Kind(),
 		InputKind: s.InputKind, ScoringMode: s.ScoringMode, Frequency: s.Frequency,
 		TargetValue: s.TargetValue, Date: s.Date, Completed: s.Completed, Unit: s.Unit,
 	}
