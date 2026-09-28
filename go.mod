@@ -1,4 +1,4 @@
-module cadence
+module github.com/rizwanreza/cadence-cli
 
 go 1.24.2
 
