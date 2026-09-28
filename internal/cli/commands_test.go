@@ -710,7 +710,9 @@ func TestUpdateNoticeOnlyOnTTYWithoutJSONOrCI(t *testing.T) {
 	if got := runTTY("today"); strings.Contains(got, "new cadence") {
 		t.Fatalf("CI must suppress the notice: %q", got)
 	}
-	t.Setenv("CI", "")
+	for _, name := range []string{"CI", "GITHUB_ACTIONS", "BUILDKITE", "CIRCLECI", "GITLAB_CI", "JENKINS_URL", "TF_BUILD"} {
+		t.Setenv(name, "")
+	}
 	if got := runTTY("today", "--json"); strings.Contains(got, "new cadence") {
 		t.Fatalf("--json must suppress the notice: %q", got)
 	}
