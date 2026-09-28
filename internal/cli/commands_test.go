@@ -266,6 +266,22 @@ func TestStatusFlagsForClosingLapsedAndFinalStretch(t *testing.T) {
 		"✓ Workout", "✗ Protein  0 / 160 g", "Last week's commitment: Phone out of the bedroom", "cadence review --id 41", "cadence cycles fresh-start")
 }
 
+func TestStatusShowsSavedWeeklyReview(t *testing.T) {
+	testEnv(t)
+	f := statusFake(t, meActive)
+	f.on("GET", "/weekly_reviews/2026-09-28.json", 200, `{"week_start":"2026-09-28","weekly_review":{"biggest_win":"Shipped"},"previous_commitment":null}`)
+	f.on("GET", "/weekly_reviews/2026-09-21.json", 200, `{"week_start":"2026-09-21","weekly_review":{"biggest_win":"Four blocks"},"previous_commitment":null}`)
+	text := run(t, f, "status")
+	mustContain(t, text.stdout, "Weekly review: saved", "cadence week review show")
+	if strings.Contains(text.stdout, "week review set") {
+		t.Fatalf("saved review should not be suggested again: %s", text.stdout)
+	}
+	unsaved := run(t, statusFake(t, meActive), "status")
+	if strings.Contains(unsaved.stdout, "Weekly review: saved") || !strings.Contains(unsaved.stdout, "week review set") {
+		t.Fatalf("unsaved review output wrong: %s", unsaved.stdout)
+	}
+}
+
 func TestStatusWithoutActiveCycle(t *testing.T) {
 	testEnv(t)
 	me := strings.Replace(meActive, meActive[strings.Index(meActive, `"active_cycle"`):strings.Index(meActive, `"closing_cycle"`)], `"active_cycle": null, `, 1)

@@ -266,6 +266,9 @@ func (a *App) renderStatus(r statusReport) {
 	if r.Week != nil && r.Week.PreviousCommitment != nil && strings.TrimSpace(*r.Week.PreviousCommitment) != "" {
 		a.printf("\nLast week's commitment: %s\n", *r.Week.PreviousCommitment)
 	}
+	if r.Week != nil && r.Week.ReviewSaved {
+		a.printf("\nWeekly review: saved %s\n", mutedStyle.Render("(cadence week review show)"))
+	}
 	if len(r.Suggestions) > 0 {
 		a.println()
 		a.println(accentStyle.Render("Up next"))
