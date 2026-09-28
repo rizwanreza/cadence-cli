@@ -211,8 +211,9 @@ New clients should use the explicit resources.
 ## Draft and activate the next cycle
 
 A draft never changes the current cycle or its progress. Activation is explicit,
-allowed only from the start date through the end date in your account timezone,
-and rejects overlapping activated cycles. Once activated, goal definitions and
+allowed through the end date in your account timezone and up to three weeks
+before the start date (which schedules the cycle; it starts on its date), and
+rejects overlapping activated cycles. Once activated, goal definitions and
 order are locked; goal notes remain editable.
 
 The [18-goal example](examples/next-cycle-18-goals.json) is illustrative. Replace
@@ -239,7 +240,7 @@ its goals, start date, and stable `plan_key` with your agreed plan first:
 ./cadence cycles import -id 42 -file next-cycle.json -dry-run
 ./cadence cycles import -id 42 -file next-cycle.json -json
 
-# Run only when authorized, on/after the intended start and before the cycle ends.
+# Run only when authorized: up to three weeks before the start, and before the cycle ends.
 ./cadence cycles activate -id 42 -json
 ./cadence score -cycle 42 -json
 ```

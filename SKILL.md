@@ -119,8 +119,9 @@ Use the versioned JSON contract and examples in [README.md](README.md) and
 - Edit: `cadence goals update -cycle <id> -goal <key> -target 20 -weekly-cap 4`.
 - Order: `cadence goals reorder -cycle <id> -order <every-goal-id,in-order>`.
 - Activation is a distinct authorized action: `cadence cycles activate -id <id>`.
-  It is permitted only during the cycle date range, rejects overlaps, and locks
-  goal definitions. Notes remain editable. Never activate as an import side effect.
+  It is permitted during the cycle date range or up to three weeks before the
+  start (scheduling it), rejects overlaps, and locks goal definitions. Notes
+  remain editable. Never activate as an import side effect.
 - Numeric logging requires `-value`; count and legacy duration logging increments
   rather than replaces the day's total. Do not blindly retry those progress writes.
 - `cadence score -cycle <id> [-week YYYY-MM-DD] [-as-of YYYY-MM-DD] -json`
