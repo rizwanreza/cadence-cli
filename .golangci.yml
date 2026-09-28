@@ -1,0 +1,15 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - misspell
+    - unconvert
+  exclusions:
+    presets:
+      - std-error-handling # unchecked Close/Fprint*/Remove are fine for a CLI
+      - common-false-positives
+
+formatters:
+  enable:
+    - gofmt
