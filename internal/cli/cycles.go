@@ -331,11 +331,11 @@ func newCycleNotesCmd(a *App) *cobra.Command {
 
 // reflectionFlags maps flags to the six end-of-cycle reflection fields.
 var reflectionFlags = []struct{ flag, field, question string }{
-	{"drove", "what_drove_results", "What specifically made your strongest weeks work?"},
-	{"limited", "what_limited_execution", "What constraint or pattern most often reduced execution?"},
-	{"redesign", "what_needs_redesign", "Which goal needs a better design, not just more discipline?"},
-	{"carry-forward", "what_to_carry_forward", "What should stay exactly the same next cycle because it clearly worked?"},
-	{"adjustment", "next_cycle_adjustment", "What single change would most improve the next 12 weeks?"},
+	{"what-drove-results", "what_drove_results", "What specifically made your strongest weeks work?"},
+	{"what-limited-execution", "what_limited_execution", "What constraint or pattern most often reduced execution?"},
+	{"what-needs-redesign", "what_needs_redesign", "Which goal needs a better design, not just more discipline?"},
+	{"what-to-carry-forward", "what_to_carry_forward", "What should stay exactly the same next cycle because it clearly worked?"},
+	{"next-cycle-adjustment", "next_cycle_adjustment", "What single change would most improve the next 12 weeks?"},
 	{"closing-notes", "closing_notes", "What else should your future self remember from this cycle?"},
 }
 
@@ -358,18 +358,21 @@ func newCycleReviewCmd(a *App) *cobra.Command {
 	set := &cobra.Command{
 		Use:   "set",
 		Short: "Save answers to the six end-of-cycle reflection questions",
-		Long: `Save answers to the end-of-cycle reflection (any subset; others are kept):
+		Long: `Save answers to the end-of-cycle reflection (any subset; others are kept).
+Flags are named after the API's reflection fields (underscores work too):
 
-  --drove          What specifically made your strongest weeks work?
-  --limited        What constraint or pattern most often reduced execution?
-  --redesign       Which goal needs a better design, not just more discipline?
-  --carry-forward  What should stay exactly the same next cycle because it clearly worked?
-  --adjustment     What single change would most improve the next 12 weeks?
-  --closing-notes  What else should your future self remember from this cycle?
+  --what-drove-results      What specifically made your strongest weeks work?
+  --what-limited-execution  What constraint or pattern most often reduced execution?
+  --what-needs-redesign     Which goal needs a better design, not just more discipline?
+  --what-to-carry-forward   What should stay exactly the same next cycle because it clearly worked?
+  --next-cycle-adjustment   What single change would most improve the next 12 weeks?
+  --closing-notes           What else should your future self remember from this cycle?
 
+Saving a review closes the cycle out (it is no longer awaiting review).
 Defaults to the cycle awaiting review.`,
-		Example: `  cadence cycles review set --drove "Morning blocks before email" --adjustment "Plan Sundays"`,
-		Args:    noArgs,
+		Example: `  cadence cycles review set --what-drove-results "Morning blocks before email" \
+    --next-cycle-adjustment "Plan on Sundays"`,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fields := map[string]string{}
 			for i, rf := range reflectionFlags {
@@ -444,6 +447,7 @@ var startOptions = map[string]string{
 func newCycleNextCmd(a *App) *cobra.Command {
 	var id int
 	var start, goals string
+	var blank bool
 	cmd := &cobra.Command{
 		Use:   "next",
 		Short: "Draft the next cycle, carrying goals forward",
@@ -451,22 +455,26 @@ func newCycleNextCmd(a *App) *cobra.Command {
 copying its active goals (or only --goals) into a new draft. Nothing is
 activated: review the draft, then run ` + "`cadence cycles activate`" + `.
 
---start:
-  after       right after this cycle ends (no gap)
+--start (default: the first option available):
+  after       right after this cycle ends (no gap; only before that date passes)
   today       start today (only once this cycle has ended)
   after-13th  take a 13th week to finish, reflect and plan first
 
-If a draft for the next cycle already exists it is returned instead.`,
+If a draft for the next cycle already exists it is returned instead; if the
+next cycle is already scheduled the command fails with exit code 5.`,
 		Example: `  cadence cycles next --start after
   cadence cycles next --id 42 --start after-13th --goals reading,protein`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := requireFlags(cmd, "start"); err != nil {
-				return err
+			key := ""
+			if start != "" {
+				var ok bool
+				if key, ok = startOptions[strings.ToLower(start)]; !ok {
+					return usageErrorf("--start must be after, today or after-13th (got %q)", start)
+				}
 			}
-			key, ok := startOptions[strings.ToLower(start)]
-			if !ok {
-				return usageErrorf("--start must be after, today or after-13th (got %q)", start)
+			if blank && goals != "" {
+				return usageErrorf("--blank and --goals can't be combined")
 			}
 			c, err := a.authedClient()
 			if err != nil {
@@ -479,6 +487,9 @@ If a draft for the next cycle already exists it is returned instead.`,
 			if err != nil {
 				return err
 			}
+			if blank {
+				goalIDs = []int{}
+			}
 			result, raw, err := c.NextCycle(a.ctx(), id, key, goalIDs)
 			if err != nil {
 				return err
@@ -486,13 +497,18 @@ If a draft for the next cycle already exists it is returned instead.`,
 			if a.jsonOut {
 				return a.printJSON(raw)
 			}
-			a.printDraftResult("Next cycle drafted", result)
+			title := "Next cycle drafted"
+			if result.CarryForward == nil {
+				title = "A draft for the next cycle already exists"
+			}
+			a.printDraftResult(title, result)
 			return nil
 		},
 	}
 	cmd.Flags().IntVar(&id, "id", 0, "Cycle to follow (default: the active or closing cycle)")
-	cmd.Flags().StringVar(&start, "start", "", "after, today or after-13th (required)")
+	cmd.Flags().StringVar(&start, "start", "", "after, today or after-13th (default: the first option available)")
 	cmd.Flags().StringVar(&goals, "goals", "", "Only carry these goals (ids or slugs, comma-separated; default all active)")
+	cmd.Flags().BoolVar(&blank, "blank", false, "Start the draft with no goals")
 	return cmd
 }
 

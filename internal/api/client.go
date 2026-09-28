@@ -91,6 +91,12 @@ func (e *NetworkError) Error() string {
 
 func (e *NetworkError) Unwrap() error { return e.Err }
 
+// Timeout reports whether the request timed out (it may have been applied).
+func (e *NetworkError) Timeout() bool {
+	var netErr net.Error
+	return errors.As(e.Err, &netErr) && netErr.Timeout()
+}
+
 func unwrapURLError(err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
@@ -267,17 +273,23 @@ func (c *Client) RequestJSON(ctx context.Context, method, path string, body, res
 
 // RequestJSONWithHeaders is RequestJSON with per-request headers.
 func (c *Client) RequestJSONWithHeaders(ctx context.Context, method, path string, headers http.Header, body, result any) error {
+	_, err := c.DoJSON(ctx, method, path, headers, body, result)
+	return err
+}
+
+// DoJSON is RequestJSONWithHeaders that also returns the response headers.
+func (c *Client) DoJSON(ctx context.Context, method, path string, headers http.Header, body, result any) (http.Header, error) {
 	var reader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		reader = bytes.NewReader(data)
 	}
 	req, err := c.NewRequest(ctx, method, path, reader)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -289,24 +301,24 @@ func (c *Client) RequestJSONWithHeaders(ctx context.Context, method, path string
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if result == nil || resp.StatusCode == http.StatusNoContent {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil
+		return resp.Header, nil
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return &NetworkError{Host: c.BaseURL, Err: err}
+		return resp.Header, &NetworkError{Host: c.BaseURL, Err: err}
 	}
 	if len(bytes.TrimSpace(data)) == 0 {
-		return nil
+		return resp.Header, nil
 	}
 	if err := json.Unmarshal(data, result); err != nil {
-		return fmt.Errorf("unexpected response from %s %s: %w", method, path, err)
+		return resp.Header, fmt.Errorf("unexpected response from %s %s: %w", method, path, err)
 	}
-	return nil
+	return resp.Header, nil
 }
 
 // remarshal converts a decoded JSON map into a typed struct.

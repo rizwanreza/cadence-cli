@@ -157,13 +157,14 @@ type WeeklyReviewResponse struct {
 
 // RangeEntry is one stored entry from GET /entries.
 type RangeEntry struct {
-	GoalID   int         `json:"goal_id"`
-	GoalKey  string      `json:"goal_key"`
-	GoalSlug string      `json:"goal_slug"`
-	GoalName string      `json:"goal_name"`
-	Date     string      `json:"date"`
-	Value    *EntryValue `json:"value"`
-	Unit     *string     `json:"unit"`
+	GoalID    int         `json:"goal_id"`
+	GoalKey   string      `json:"goal_key"`
+	GoalSlug  string      `json:"goal_slug"`
+	GoalName  string      `json:"goal_name"`
+	Date      string      `json:"date"`
+	Value     *EntryValue `json:"value"`
+	Completed *bool       `json:"completed"`
+	Unit      *string     `json:"unit"`
 }
 
 // MarshalJSON keeps value a JSON number.
@@ -174,7 +175,7 @@ func (e RangeEntry) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(map[string]any{
 		"goal_id": e.GoalID, "goal_key": e.GoalKey, "goal_slug": e.GoalSlug, "goal_name": e.GoalName,
-		"date": e.Date, "value": value, "unit": e.Unit,
+		"date": e.Date, "value": value, "completed": e.Completed, "unit": e.Unit,
 	})
 }
 
@@ -188,6 +189,7 @@ type EntriesRange struct {
 // Insight is GET /progress_insight.
 type Insight struct {
 	WeekStart   string  `json:"week_start"`
+	CycleID     *int    `json:"cycle_id"`
 	Source      string  `json:"source"`
 	Stale       bool    `json:"stale"`
 	GeneratedAt *string `json:"generated_at"`
@@ -310,7 +312,7 @@ type ReflectionSection struct {
 	SystemInsight string   `json:"system_insight"`
 	Question      string   `json:"question"`
 	CueChips      []string `json:"cue_chips"`
-	Answer        *string  `json:"answer,omitempty"`
+	Response      *string  `json:"response,omitempty"`
 }
 
 // EntryValue tolerates the API's mix of JSON numbers, numeric strings

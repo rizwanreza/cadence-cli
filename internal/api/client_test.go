@@ -228,3 +228,27 @@ func TestIdempotencyKeyOnlyOnAdd(t *testing.T) {
 		t.Fatalf("unexpected idempotency keys: %v", keys)
 	}
 }
+
+func TestAddRetriesOnceWithTheSameKeyAfterAConnectionDrop(t *testing.T) {
+	var keys []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keys = append(keys, r.Header.Get("Idempotency-Key"))
+		if len(keys) == 1 {
+			// Drop the connection without a response, as a flaky network would.
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
+			return
+		}
+		w.Header().Set("Idempotent-Replayed", "true")
+		_, _ = w.Write([]byte(`{"goal_id":1,"value":42}`))
+	}))
+	defer server.Close()
+	c := &Client{HTTP: server.Client(), BaseURL: server.URL}
+	entry, replayed, err := c.WriteNumericEntryReplay(context.Background(), 1, "", "2", "add", "same-key")
+	if err != nil || !replayed || entry.Value.Float() != 42 {
+		t.Fatalf("entry=%+v replayed=%v err=%v", entry, replayed, err)
+	}
+	if len(keys) != 2 || keys[0] != "same-key" || keys[1] != "same-key" {
+		t.Fatalf("keys = %v", keys)
+	}
+}

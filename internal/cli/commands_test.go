@@ -282,14 +282,14 @@ func TestStatusWithoutActiveCycle(t *testing.T) {
 func TestHistory(t *testing.T) {
 	testEnv(t)
 	f := newFake(t).on("GET", "/api/v1/entries", 200, `{"from":"2026-09-01","to":"2026-09-07","entries":[
-	  {"goal_id":2,"goal_key":"protein","goal_slug":"protein","goal_name":"Protein","date":"2026-09-01","value":"120.0","unit":"g"}]}`)
+	  {"goal_id":2,"goal_key":"protein","goal_slug":"protein","goal_name":"Protein","date":"2026-09-01","value":"120.0","completed":false,"unit":"g"}]}`)
 	res := run(t, f, "history", "--from", "2026-09-01", "--to", "2026-09-07", "--goal", "protein", "--json")
 	req := f.last("GET", "/api/v1/entries")
 	if req.Query != "from=2026-09-01&goal=protein&to=2026-09-07" {
 		t.Fatalf("query = %s", req.Query)
 	}
 	entry := decodeJSON(t, res.stdout)["entries"].([]any)[0].(map[string]any)
-	if entry["value"] != float64(120) {
+	if entry["value"] != float64(120) || entry["completed"] != false {
 		t.Fatalf("value should be a JSON number: %s", res.stdout)
 	}
 	mustContain(t, run(t, f, "history").stdout, "2026-09-01", "Protein", "120 g")
@@ -329,7 +329,7 @@ func TestCycleReviewSetDefaultsToClosingCycleAndDismiss(t *testing.T) {
 	f := newFake(t).on("GET", "/api/v1/me", 200, me)
 	f.on("PATCH", "/api/v1/twelve_week_years/41/review", 200, `{"id":41}`)
 	f.on("POST", "/api/v1/twelve_week_years/41/review_dismissal", 200, `{"id":41,"review_dismissed":true}`)
-	res := run(t, f, "cycles", "review", "set", "--drove", "Mornings", "--closing-notes", "Rest more")
+	res := run(t, f, "cycles", "review", "set", "--what-drove-results", "Mornings", "-closing_notes", "Rest more")
 	if res.code != 0 {
 		t.Fatal(res.stderr)
 	}
@@ -423,7 +423,9 @@ func TestInsightAndScoreSignals(t *testing.T) {
 	  "assessment":"Solid start.","guidance":"Protect mornings.","risk":"Protein slipped twice.","leverage":"Prep lunches."}`)
 	f.on("GET", "/api/v1/twelve_week_years/42/scorecard", 200, `{"execution_percentage":40,"total_points":4,"max_possible_points":10,"pace_percentage":90,"rating":"On Track",
 	  "period_start_date":"2026-09-28","period_end_date":"2026-10-04","as_of_date":"2026-09-28",
-	  "risk":"Risk: Protein — avoid a second miss today.","leverage":"Most leverage: complete Reading today to get back on pace.","streaks":null}`)
+	  "risk":{"message":"Risk: Protein — avoid a second miss today.","goals":[{"goal_id":2,"goal_name":"Protein"}]},
+	  "leverage":{"message":"Most leverage: complete Reading today to get back on pace.","goal":{"goal_id":7,"goal_name":"Reading","pace_percentage":33.3}},
+	  "streaks":null}`)
 	res := run(t, f, "insight", "--week", "2026-09-28")
 	mustContain(t, res.stdout, "Assessment: Solid start.", "Leverage: Prep lunches.", "refreshing")
 	if q := f.last("GET", "/api/v1/progress_insight").Query; q != "week_start=2026-09-28" {
@@ -731,5 +733,47 @@ func TestUpdateNoticeOnlyOnTTYWithoutJSONOrCI(t *testing.T) {
 	}
 	if after != before {
 		t.Fatalf("expected a cached check, GitHub was hit %d more time(s)", after-before)
+	}
+}
+
+func TestCyclesNextBlankDefaultStartAndConflicts(t *testing.T) {
+	testEnv(t)
+	f := newFake(t)
+	f.on("POST", "/api/v1/twelve_week_years/42/next_cycle", 200, `{"twelve_week_year":{"id":43,"name":"Winter","status":"draft"},"goals":[],"carry_forward":null}`)
+	res := run(t, f, "cycles", "next", "--id", "42", "--blank")
+	if res.code != 0 {
+		t.Fatal(res.stderr)
+	}
+	if body := f.last("POST", "/api/v1/twelve_week_years/42/next_cycle").Body; body != `{"goal_ids":[]}` {
+		t.Fatalf("body = %s (no start: the server picks the first option)", body)
+	}
+	mustContain(t, res.stdout, "already exists")
+
+	f.on("POST", "/api/v1/twelve_week_years/42/next_cycle", 409, `{"error":{"code":"conflict","message":"The next cycle is already scheduled.","details":[]},"errors":[]}`)
+	if res := run(t, f, "cycles", "next", "--id", "42"); res.code != ExitConflict || !strings.Contains(res.stderr, "already scheduled") {
+		t.Fatalf("%+v", res)
+	}
+	f.on("POST", "/api/v1/twelve_week_years/42/next_cycle", 422, `{"error":{"code":"validation_failed","message":"start must be one of: today, after_13th.","details":["start must be one of: today, after_13th."]},"errors":["start must be one of: today, after_13th."]}`)
+	if res := run(t, f, "cycles", "next", "--id", "42", "--start", "after"); res.code != ExitConflict || !strings.Contains(res.stderr, "start must be one of: today, after_13th.") {
+		t.Fatalf("%+v", res)
+	}
+}
+
+func TestAddReportsIdempotentReplay(t *testing.T) {
+	testEnv(t)
+	f := newFake(t)
+	f.on("GET", "/api/v1/goals", 200, `[{"id":26,"slug":"protein","name":"Protein","input_kind":"number","target_value":160,"unit":"g"}]`)
+	f.handle("POST", "/api/v1/goals/26/entries/today/increments", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Idempotency-Key") != "meal-1" {
+			t.Fatalf("key = %q", r.Header.Get("Idempotency-Key"))
+		}
+		w.Header().Set("Idempotent-Replayed", "true")
+		w.WriteHeader(201)
+		_, _ = w.Write([]byte(`{"goal_id":26,"date":"2026-09-28","previous_value":0,"value":40,"completed":false}`))
+	})
+	res := run(t, f, "add", "--goal", "protein", "--value", "40", "--idempotency-key", "meal-1", "--json")
+	out := decodeJSON(t, res.stdout)
+	if out["replayed"] != true || out["idempotency_key"] != "meal-1" {
+		t.Fatalf("%s", res.stdout)
 	}
 }

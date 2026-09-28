@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -107,7 +108,10 @@ func (c *Client) DismissReview(ctx context.Context, id int) (map[string]any, err
 
 // NextCycle calls POST /twelve_week_years/:id/next_cycle.
 func (c *Client) NextCycle(ctx context.Context, id int, start string, goalIDs []int) (NextCycleResult, map[string]any, error) {
-	body := map[string]any{"start": start}
+	body := map[string]any{}
+	if start != "" {
+		body["start"] = start
+	}
 	if goalIDs != nil {
 		body["goal_ids"] = goalIDs
 	}
@@ -230,8 +234,17 @@ func (c *Client) CreateEntry(ctx context.Context, goalID int, date, rawValue str
 }
 
 // WriteNumericEntry replaces (set) or increments (add) a day's total. An add
-// carries idempotencyKey so a retried request is not applied twice.
+// carries idempotencyKey so a retried request is not applied twice: when the
+// connection fails (but didn't time out) it is retried once with the same key,
+// and the server replays the first result if it had already been applied.
+// Replayed reports the server's Idempotent-Replayed header.
 func (c *Client) WriteNumericEntry(ctx context.Context, goalID int, date, value, operation, idempotencyKey string) (Entry, error) {
+	entry, _, err := c.WriteNumericEntryReplay(ctx, goalID, date, value, operation, idempotencyKey)
+	return entry, err
+}
+
+// WriteNumericEntryReplay is WriteNumericEntry that also reports a replay.
+func (c *Client) WriteNumericEntryReplay(ctx context.Context, goalID int, date, value, operation, idempotencyKey string) (Entry, bool, error) {
 	if date == "" {
 		date = "today"
 	}
@@ -245,8 +258,22 @@ func (c *Client) WriteNumericEntry(ctx context.Context, goalID int, date, value,
 			headers = http.Header{"Idempotency-Key": []string{idempotencyKey}}
 		}
 	}
+	body := map[string]any{key: map[string]string{"value": value}} // decimal text kept intact
+	attempts := 1
+	if headers != nil {
+		attempts = 2
+	}
 	var result Entry
-	// Keep the decimal text intact; the server validates and sums decimals.
-	err := c.RequestJSONWithHeaders(ctx, method, path, headers, map[string]any{key: map[string]string{"value": value}}, &result)
-	return result, err
+	var respHeader http.Header
+	var err error
+	for attempt := 0; attempt < attempts; attempt++ {
+		result = Entry{}
+		respHeader, err = c.DoJSON(ctx, method, path, headers, body, &result)
+		var netErr *NetworkError
+		if err == nil || !errors.As(err, &netErr) || netErr.Timeout() {
+			break
+		}
+	}
+	replayed := respHeader != nil && respHeader.Get("Idempotent-Replayed") == "true"
+	return result, replayed, err
 }

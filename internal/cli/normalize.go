@@ -38,7 +38,7 @@ func NormalizeArgs(root *cobra.Command, args []string) []string {
 			out = append(out, arg)
 			continue
 		}
-		valued, known := takesValue[name]
+		valued, known := takesValue[strings.ReplaceAll(name, "_", "-")]
 		if !known {
 			out = append(out, arg)
 			continue

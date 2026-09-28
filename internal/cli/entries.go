@@ -3,6 +3,7 @@ package cli
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -193,8 +194,12 @@ request that timed out and the server will not apply it twice.`
 		if operation == "add" && key == "" {
 			key = randomKey()
 		}
-		entry, err := c.WriteNumericEntry(a.ctx(), g.ID, date, rawValue, operation, key)
+		entry, replayed, err := c.WriteNumericEntryReplay(a.ctx(), g.ID, date, rawValue, operation, key)
 		if err != nil {
+			var netErr *api.NetworkError
+			if operation == "add" && errors.As(err, &netErr) {
+				return fmt.Errorf("%w. The addition may have been applied: check `cadence today --date <day>`, or retry with --idempotency-key %s so it can't be applied twice", err, key)
+			}
 			return err
 		}
 		if a.jsonOut {
@@ -210,12 +215,16 @@ request that timed out and the server will not apply it twice.`
 			}
 			if operation == "add" {
 				out["idempotency_key"] = key
+				out["replayed"] = replayed
 			}
 			return a.printJSON(out)
 		}
 		before := "no entry"
 		if entry.PreviousValue != nil {
 			before = formatNumber(entry.PreviousValue.Float())
+		}
+		if replayed {
+			a.println(mutedStyle.Render("Already applied earlier with this idempotency key; nothing was added again."))
 		}
 		if operation == "add" {
 			a.printf("Added %s (%s → %s). %s\n", formatNumber(value), before, formatNumber(entry.Value.Float()), renderEntrySummary(g, entry))

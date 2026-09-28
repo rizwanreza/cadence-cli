@@ -7,6 +7,7 @@ import (
 	"github.com/rizwanreza/cadence-cli/internal/config"
 	"github.com/rizwanreza/cadence-cli/internal/version"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -54,6 +55,10 @@ https://cadenceweek.com. Start with:
 		return &UsageError{Msg: err.Error(), Hint: fmt.Sprintf("Run `%s --help` for usage.", cmd.CommandPath())}
 	})
 
+	// --what_drove_results works like --what-drove-results.
+	root.SetGlobalNormalizationFunc(func(f *pflag.FlagSet, name string) pflag.NormalizedName {
+		return pflag.NormalizedName(strings.ReplaceAll(name, "_", "-"))
+	})
 	flags := root.PersistentFlags()
 	flags.StringVar(&a.urlFlag, "url", "", "Cadence host (default "+config.DefaultHost+"; env CADENCE_URL)")
 	flags.StringVar(&a.tokenFlag, "token", "", "API token (overrides CADENCE_TOKEN and the saved login)")

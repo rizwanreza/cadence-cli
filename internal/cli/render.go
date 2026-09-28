@@ -203,7 +203,7 @@ func renderReviewSummary(review api.Review) string {
 	b.WriteString(accentStyle.Render("Reflection Prompts") + "\n")
 	for _, section := range review.ReflectionSections {
 		fmt.Fprintf(&b, "- %s: %s\n", section.Title, section.Question)
-		answer := section.Answer
+		answer := section.Response
 		if answer == nil && review.Reflection != nil {
 			answer = review.Reflection[section.Key]
 		}
@@ -301,6 +301,13 @@ func describe(v any) string {
 		return ""
 	case string:
 		return value
+	case map[string]any:
+		// Scorecard alerts: {"message": "...", ...}
+		if msg, ok := value["message"].(string); ok {
+			return msg
+		}
+		data, _ := json.Marshal(value)
+		return string(data)
 	default:
 		data, _ := json.Marshal(value)
 		return string(data)
