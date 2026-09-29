@@ -26,5 +26,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Promoting an rc puts two tags on one commit; build the one that was pushed.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           # Fine-grained PAT with contents:write on rizwanreza/homebrew-tap.
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
